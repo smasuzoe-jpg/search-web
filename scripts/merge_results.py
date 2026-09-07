@@ -24,8 +24,8 @@ def main(work_path, found_path):
         url, conf, note = r["ウェブサイトURL"], "", ""
         if hit:
             note = hit["判定根拠"]
-            if hit["ウェブサイトURL"] in ("未検出", "未調査"):
-                conf = hit["ウェブサイトURL"]
+            if hit["ウェブサイトURL"].strip("（）() ") in ("未検出", "未調査"):
+                conf = hit["ウェブサイトURL"].strip("（）() ")
                 stats[conf] += 1
             else:
                 url = hit["ウェブサイトURL"]
