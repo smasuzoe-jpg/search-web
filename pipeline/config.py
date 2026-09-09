@@ -44,6 +44,7 @@ BLOCKED_DOMAINS = [
     "smile-nurse.jp",       # 看護師求人
     "jmap.jp",              # 地域医療情報システム
     "kaigokensaku.mhlw.go.jp",
+    "wam.go.jp",            # WAM NET（福祉医療機構の情報公表システム）
 ]
 
 # ドメイン末尾での除外。ここに該当したら候補にしない。
@@ -54,7 +55,11 @@ BLOCKED_SUFFIXES = [
 
 # 自治体ドメインは「公的施設のときだけ」公式サイトとして認める。
 # 県立病院や保健所は lg.jp が正規サイトだが、民間クリニックのlg.jpは案内ページ。
+# lg.jp を使わない自治体もある（群馬は pref.gunma.jp、札幌は city.sapporo.jp）。
+# 末尾だけでなくホスト名の途中に pref./city./town./vill. が現れる形も拾う。
 PUBLIC_ONLY_SUFFIXES = [".lg.jp"]
+PUBLIC_ONLY_PATTERNS = [r"(^|\.)pref\.", r"(^|\.)city\.", r"(^|\.)town\.",
+                        r"(^|\.)vill\."]
 PUBLIC_NAME_KEYWORDS = ["保健所", "県立", "市立", "町立", "村立", "都立", "府立",
                         "道立", "国立", "公立", "大学", "医療センター",
                         "保健センター", "保健福祉", "市民病院", "町民病院"]

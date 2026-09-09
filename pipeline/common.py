@@ -2,7 +2,8 @@
 """正規化と共通ユーティリティ。"""
 import csv, os, re, sys, unicodedata
 from config import (COLUMN_ALIASES, BLOCKED_DOMAINS, BLOCKED_SUFFIXES,
-                    PUBLIC_ONLY_SUFFIXES, PUBLIC_NAME_KEYWORDS)
+                    PUBLIC_ONLY_SUFFIXES, PUBLIC_ONLY_PATTERNS,
+                    PUBLIC_NAME_KEYWORDS)
 
 LEGAL = ["医療法人社団", "医療法人財団", "一般社団法人", "公益社団法人", "一般財団法人",
          "公益財団法人", "社会医療法人", "特定医療法人", "独立行政法人", "地方独立行政法人",
@@ -131,7 +132,9 @@ def is_blocked_for(url, name):
     if is_blocked(url):
         return True
     host = url_host(url)
-    if any(host.endswith(sfx) for sfx in PUBLIC_ONLY_SUFFIXES):
+    is_public_domain = (any(host.endswith(sfx) for sfx in PUBLIC_ONLY_SUFFIXES)
+                        or any(re.search(p, host) for p in PUBLIC_ONLY_PATTERNS))
+    if is_public_domain:
         return not any(k in (name or "") for k in PUBLIC_NAME_KEYWORDS)
     return False
 
