@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """パイプライン共通設定。運用に合わせてここだけ書き換える。"""
+import os
+
 
 # --- 入力CSVの列名ゆれ吸収 -------------------------------------------------
 # 実ファイルのヘッダ名に合わせて候補を足す。左から順に最初に見つかった列を使う。
@@ -66,13 +68,16 @@ PUBLIC_NAME_KEYWORDS = ["保健所", "県立", "市立", "町立", "村立", "�
 
 # --- 検索プロバイダ ---------------------------------------------------------
 # "serper" | "google_cse" | "brave"
-SEARCH_PROVIDER = "serper"
+SEARCH_PROVIDER = os.environ.get("SEARCH_PROVIDER", "serper")
 SEARCH_RESULTS_PER_QUERY = 5
-SEARCH_QPS = 5.0          # 1秒あたりのリクエスト数上限
+# 1秒あたりのリクエスト数上限。環境変数SEARCH_QPSで上書きできる。
+SEARCH_QPS = float(os.environ.get("SEARCH_QPS", "5"))
 SEARCH_MAX_RETRY = 3
 
 # --- 照合（検証）フェーズ ---------------------------------------------------
-VERIFY_CONCURRENCY = 8
+# 同時に開くページ数。環境変数VERIFY_CONCURRENCYで上書きできる。
+# 8→24 に上げると照合時間はおよそ3分の1になる。
+VERIFY_CONCURRENCY = int(os.environ.get("VERIFY_CONCURRENCY", "8"))
 VERIFY_TIMEOUT = 15
 VERIFY_USER_AGENT = "Mozilla/5.0 (compatible; facility-url-bot/1.0)"
 # 電話一致=3, 番地一致=2, 施設名一致=2, 市区町村一致=1 の重み付け合計で判定

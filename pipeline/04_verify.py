@@ -172,9 +172,11 @@ def main(cand_path, out_path):
                     url, conf, why = "", "未検出", f"照合エラー: {e}"
                 out.write("\t".join([r["医療機関コード"], r["会社名"],
                                      url or "（未検出）", conf, why]) + "\n")
-                out.flush()
-                if i % 200 == 0:
+                if i % 50 == 0:
+                    out.flush()          # ドライブ上での書き込みを50件ごとにまとめる
+                if i % 500 == 0:
                     log(f"  ... {i}/{len(recs)}")
+            out.flush()
     log("[verify] 完了")
 
 

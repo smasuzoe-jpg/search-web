@@ -118,10 +118,14 @@ def main():
                                   "検索クエリ": r["検索クエリ"],
                                   "候補": cands[:SEARCH_RESULTS_PER_QUERY]},
                                  ensure_ascii=False) + "\n")
-            out.flush()
             n += 1
-            if n % 200 == 0:
+            # Googleドライブ上で動かすと1件ごとのflushが極端に遅いので50件ごとにまとめる。
+            # 中断時に失うのは最大50件で、再開すればその分だけ検索し直される。
+            if n % 50 == 0:
+                out.flush()
+            if n % 500 == 0:
                 log(f"  ... {n}/{len(todo)}")
+        out.flush()
     log(f"[search] 完了 {n}件 検索実行 / 累計 {len(done) + n}件")
 
 
