@@ -9,7 +9,7 @@ data/opendata/ に置いた都道府県別CSVから「医療機関コード」�
 列名は自治体・年度でぶれるため、キーワード一致で拾う方式にしてある。
 """
 import csv, glob, os, re, sys
-from common import norm_code, norm_phone, open_csv, is_blocked, log
+from common import norm_hospital_code, norm_phone, open_csv, is_blocked, log
 
 CODE_HINTS  = ["医療機関コード", "機関コード", "kikanCd", "医療機関番号"]
 URL_HINTS   = ["ホームページ", "ＵＲＬ", "URL", "url", "ウェブサイト", "アドレス"]
@@ -46,9 +46,9 @@ def load_opendata(dirpath):
             url = (r.get(uc) or "").strip()
             if not url.lower().startswith("http") or is_blocked(url):
                 continue
-            code = norm_code(r.get(cc)) if cc else ""
+            code = norm_hospital_code(r.get(cc)) if cc else ""
             phone = norm_phone(r.get(pc)) if pc else ""
-            if len(code) >= 9:
+            if len(code) == 10:
                 table["code"].setdefault(code, url)
             if len(phone) >= 9:
                 table["phone"].setdefault(phone, url)
