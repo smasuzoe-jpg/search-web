@@ -113,6 +113,10 @@ python3 pipeline/05_export.py data/pilot.csv data/pilot_verified.tsv data/pilot
 python3 pipeline/03_search.py data/out1_work2.csv data/out1_cand.jsonl
 ```
 
+検索は8本並列で投げる（`SEARCH_CONCURRENCY`）。1件ずつ順番だと1件あたりの
+往復待ちがそのまま総時間になり、96,000件で10時間を超えてしまう。
+全体の流量は `SEARCH_QPS` で毎秒10件に抑えている。
+
 クエリは `施設名（分院名まで）+ 市区町村 + 公式サイト`。
 ポータル・口コミ・求人・地図・SNSの約60ドメインを除外済み。これが効率の要で、
 除外しないと上位がほぼ全部ポータルで埋まり、照合工程の負荷が数倍になる。

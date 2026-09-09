@@ -73,6 +73,8 @@ SEARCH_RESULTS_PER_QUERY = 5
 # 1秒あたりのリクエスト数上限。環境変数SEARCH_QPSで上書きできる。
 SEARCH_QPS = float(os.environ.get("SEARCH_QPS", "5"))
 SEARCH_MAX_RETRY = 3
+# 検索を同時に何本投げるか。1本ずつだと1件あたりの往復待ちがそのまま総時間になる。
+SEARCH_CONCURRENCY = int(os.environ.get("SEARCH_CONCURRENCY", "8"))
 
 # --- 照合（検証）フェーズ ---------------------------------------------------
 # 同時に開くページ数。環境変数VERIFY_CONCURRENCYで上書きできる。

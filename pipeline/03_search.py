@@ -8,22 +8,25 @@ STEP3: URL未充足の行だけ検索APIに投げ、候補URLを集める。
 中断・再開できる。candidates.jsonl に既にあるコードは再検索しない。
 APIキーは環境変数からのみ読む（ファイルに書かない）。
 """
-import argparse, json, os, sys, time
+import argparse, concurrent.futures as cf, json, os, sys, threading, time
 import requests
 from common import open_csv, is_blocked, log
 import csv
-from config import (SEARCH_PROVIDER, SEARCH_RESULTS_PER_QUERY,
-                    SEARCH_QPS, SEARCH_MAX_RETRY)
+from config import (SEARCH_PROVIDER, SEARCH_RESULTS_PER_QUERY, SEARCH_QPS,
+                    SEARCH_MAX_RETRY, SEARCH_CONCURRENCY)
 
 _last = [0.0]
+_lock = threading.Lock()
 
 
 def throttle():
+    """並列で投げても全体で SEARCH_QPS を超えないようにする。"""
     gap = 1.0 / SEARCH_QPS
-    wait = gap - (time.time() - _last[0])
-    if wait > 0:
-        time.sleep(wait)
-    _last[0] = time.time()
+    with _lock:
+        wait = gap - (time.time() - _last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last[0] = time.time()
 
 
 def search_serper(q):
@@ -103,28 +106,46 @@ def main():
         todo = todo[:a.limit]
     log(f"[search] 対象 {len(todo)}件 provider={SEARCH_PROVIDER}")
 
+    g = lambda r, k: r.get(k) or ""
+
+    stop_flag = threading.Event()
+
+    def one(r):
+        """1件検索して保存用の辞書を返す。失敗は例外のまま呼び出し元へ渡す。"""
+        if stop_flag.is_set():
+            raise RuntimeError("打ち切り済み")   # クレジットを無駄に消費しない
+        hits = run_query(g(r, "検索クエリ"))
+        cands = [h for h in hits if h["url"] and not is_blocked(h["url"])]
+        return {"医療機関コード": g(r, "医療機関コード"), "会社名": g(r, "会社名"),
+                "住所": g(r, "住所"), "電話番号": g(r, "電話番号"),
+                "検索クエリ": g(r, "検索クエリ"),
+                "候補": cands[:SEARCH_RESULTS_PER_QUERY]}
+
     n = 0
+    stop = False
     with open(a.outfile, "a", encoding="utf-8") as out:
-        for r in todo:
-            try:
-                hits = run_query(r.get("検索クエリ") or "")
-            except Exception as e:
-                log(f"[error] {r.get('医療機関コード')} {r.get('会社名')}: {e}")
-                break                      # キー切れ・上限超過は即停止して再開に任せる
-            cands = [h for h in hits if h["url"] and not is_blocked(h["url"])]
-            out.write(json.dumps({"医療機関コード": r["医療機関コード"],
-                                  "会社名": r["会社名"], "住所": r["住所"],
-                                  "電話番号": r.get("電話番号", ""),
-                                  "検索クエリ": r["検索クエリ"],
-                                  "候補": cands[:SEARCH_RESULTS_PER_QUERY]},
-                                 ensure_ascii=False) + "\n")
-            n += 1
-            # Googleドライブ上で動かすと1件ごとのflushが極端に遅いので50件ごとにまとめる。
-            # 中断時に失うのは最大50件で、再開すればその分だけ検索し直される。
-            if n % 50 == 0:
-                out.flush()
-            if n % 500 == 0:
-                log(f"  ... {n}/{len(todo)}")
+        with cf.ThreadPoolExecutor(SEARCH_CONCURRENCY) as ex:
+            futs = {ex.submit(one, r): r for r in todo}
+            for fut in cf.as_completed(futs):
+                r = futs[fut]
+                try:
+                    rec = fut.result()
+                except Exception as e:
+                    # キー切れ・クレジット超過は続けても無駄なので打ち切り、再開に任せる
+                    if not stop:
+                        log(f"[error] {g(r, '医療機関コード')} {g(r, '会社名')}: {e}")
+                        log("[search] 以降を打ち切ります。原因を直して再実行すれば続きから走ります。")
+                        stop = True
+                        stop_flag.set()
+                    continue
+                out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                n += 1
+                # Googleドライブ上では1件ごとのflushが極端に遅いので50件ごとにまとめる。
+                # 中断時に失うのは最大50件で、再開すればその分だけ検索し直される。
+                if n % 50 == 0:
+                    out.flush()
+                if n % 500 == 0:
+                    log(f"  ... {n}/{len(todo)}")
         out.flush()
     log(f"[search] 完了 {n}件 検索実行 / 累計 {len(done) + n}件")
 
