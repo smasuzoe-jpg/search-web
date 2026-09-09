@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """正規化と共通ユーティリティ。"""
 import csv, os, re, sys, unicodedata
-from config import COLUMN_ALIASES, BLOCKED_DOMAINS
+from config import (COLUMN_ALIASES, BLOCKED_DOMAINS, BLOCKED_SUFFIXES,
+                    PUBLIC_ONLY_SUFFIXES, PUBLIC_NAME_KEYWORDS)
 
 LEGAL = ["医療法人社団", "医療法人財団", "一般社団法人", "公益社団法人", "一般財団法人",
          "公益財団法人", "社会医療法人", "特定医療法人", "独立行政法人", "地方独立行政法人",
@@ -113,10 +114,26 @@ def build_query(name, addr):
     return f"{nfkc(name).strip()} {city_part(addr)} 公式サイト"
 
 
-def is_blocked(url):
+def url_host(url):
     host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
-    host = host.split(":")[0]
+    return host.split(":")[0]
+
+
+def is_blocked(url):
+    host = url_host(url)
+    if any(host.endswith(sfx) for sfx in BLOCKED_SUFFIXES):
+        return True
     return any(host == b or host.endswith("." + b) for b in _BLOCK)
+
+
+def is_blocked_for(url, name):
+    """施設名まで見た除外判定。自治体ドメインは公的施設のときだけ認める。"""
+    if is_blocked(url):
+        return True
+    host = url_host(url)
+    if any(host.endswith(sfx) for sfx in PUBLIC_ONLY_SUFFIXES):
+        return not any(k in (name or "") for k in PUBLIC_NAME_KEYWORDS)
+    return False
 
 
 def resolve_columns(header):

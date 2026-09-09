@@ -11,7 +11,8 @@ import concurrent.futures as cf, json, os, re, sys, threading, time
 import urllib.robotparser as rp
 from urllib.parse import urljoin, urlparse
 import requests
-from common import norm_name, norm_phone, addr_numbers, city_part, nfkc, log
+from common import (norm_name, norm_phone, addr_numbers, city_part, nfkc, log,
+                    is_blocked_for)
 from config import (VERIFY_CONCURRENCY, VERIFY_TIMEOUT, VERIFY_USER_AGENT,
                     CONFIDENCE_HIGH, CONFIDENCE_MID, SUBPAGE_HINTS)
 
@@ -112,6 +113,8 @@ def judge(rec):
     best = None
     for c in rec.get("候補", []):
         url = c["url"]
+        if is_blocked_for(url, rec.get("会社名", "")):
+            continue                      # ポータル・医師会・自治体案内は公式サイトではない
         html = fetch(url)
         if not html:
             continue

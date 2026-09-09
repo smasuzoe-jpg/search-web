@@ -35,7 +35,29 @@ BLOCKED_DOMAINS = [
     "ekiten.jp", "facebook.com", "instagram.com", "x.com", "twitter.com",
     "youtube.com", "line.me", "ja.wikipedia.org", "hotpepper.jp", "e-shops.jp",
     "doctorqube.com", "apokul.jp", "icall-web.net", "machimachi.com",
+    # --- パイロット1,000件で実際に誤採用されたポータル ---
+    "web-clover.net",       # 医療機関検索ポータル
+    "yomiuri.co.jp",        # ヨミドクター（新聞記事）
+    "melmo-app.com",        # 予約アプリ
+    "yoku-mite.care",       # 医師紹介ポータル
+    "med-pro.jp",           # 会員向け医療ポータル
+    "smile-nurse.jp",       # 看護師求人
+    "jmap.jp",              # 地域医療情報システム
+    "kaigokensaku.mhlw.go.jp",
 ]
+
+# ドメイン末尾での除外。ここに該当したら候補にしない。
+BLOCKED_SUFFIXES = [
+    ".mhlw.go.jp",   # 医療情報ネット等、厚労省の検索ポータル
+    ".med.or.jp",    # 医師会の医療機関ディレクトリ（公式サイトではない）
+]
+
+# 自治体ドメインは「公的施設のときだけ」公式サイトとして認める。
+# 県立病院や保健所は lg.jp が正規サイトだが、民間クリニックのlg.jpは案内ページ。
+PUBLIC_ONLY_SUFFIXES = [".lg.jp"]
+PUBLIC_NAME_KEYWORDS = ["保健所", "県立", "市立", "町立", "村立", "都立", "府立",
+                        "道立", "国立", "公立", "大学", "医療センター",
+                        "保健センター", "保健福祉", "市民病院", "町民病院"]
 
 # --- 検索プロバイダ ---------------------------------------------------------
 # "serper" | "google_cse" | "brave"
