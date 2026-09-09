@@ -12,7 +12,7 @@ STEP1: HubSpotエクスポートを正規化し、重複グループと検索ク
 """
 import csv, sys
 from collections import defaultdict
-from common import (norm_name, norm_code, norm_zip, build_query,
+from common import (norm_name, norm_code, norm_zip, norm_phone, build_query,
                     resolve_columns, open_csv, log)
 
 OUT_COLS = ["レコードID", "会社名", "医療機関コード", "郵便番号", "都道府県",
@@ -24,22 +24,27 @@ def dedup_key(r):
     code = norm_code(r["code"])
     if len(code) >= 9:
         return "CODE", code
+    phone = norm_phone(r["phone"])
+    if len(phone) >= 9:
+        return "PHONE", phone        # コード欠損時の代替キー。1施設1代表番号が原則
     z, n = norm_zip(r["zip"]), norm_name(r["name"])
     if z and n:
         return "ZIP+NAME", f"{z}:{n}"
-    return "PREF+NAME", f'{r["pref"]}:{n}'
+    return "PREF+NAME", f'{r["pref"]}:{n}' 
 
 
 def main(path):
     f = open_csv(path)
     rd = csv.DictReader(f)
     cols = resolve_columns(rd.fieldnames or [])
-    for need in ("record_id", "name", "code", "addr"):
+    for need in ("record_id", "name", "addr"):
         if not cols[need]:
             raise SystemExit(f"必須列が見つかりません: {need} / 実ヘッダ={rd.fieldnames}")
     if not cols["phone"]:
-        log("[warn] 電話番号列がありません。STEP4の照合精度が落ちます。"
-            "可能なら電話番号を含めて再エクスポートしてください。")
+        log("[warn] 電話番号列がありません。STEP4の照合精度が大きく落ちます。")
+    if not cols["code"]:
+        log("[warn] 医療機関コード列がありません。同一性判定は電話番号にフォールバックします。"
+            "コードを含めて再エクスポートすると重複判定もオープンデータ突合も精度が上がります。")
 
     rows = []
     for src in rd:

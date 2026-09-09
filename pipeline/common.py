@@ -33,16 +33,27 @@ def norm_zip(s):
 def norm_phone(s):
     """数字だけに落とす。国番号+81は0に戻す。"""
     d = re.sub(r"\D", "", nfkc(s))
+    # 「810467468610」のように国番号81が頭に付いた行がある。81を外し、
+    # 残りが0で始まらない場合だけ0を補う（二重の0を作らない）。
     if d.startswith("81") and len(d) >= 11:
-        d = "0" + d[2:]
+        d = d[2:]
+        if not d.startswith("0"):
+            d = "0" + d
     return d
+
+
+# 「羽村市」を「羽村」で切らないよう、市→区→町→村の順に当てる。
+_CITY_PATTERNS = [r"^(.+?市.+?区)", r"^(.+?市)", r"^(.+?区)", r"^(.+?町)", r"^(.+?村)"]
 
 
 def city_part(addr):
     """住所から市区町村までを切り出す。検索クエリの地名に使う。"""
     a = nfkc(addr)
-    m = re.match(r"^(.+?市.+?区|.+?[市区町村])", a)
-    return m.group(1) if m else a[:6]
+    for pat in _CITY_PATTERNS:
+        m = re.match(pat, a)
+        if m:
+            return m.group(1)
+    return a[:6]
 
 
 def addr_numbers(addr):

@@ -9,10 +9,11 @@ data/opendata/ に置いた都道府県別CSVから「医療機関コード」�
 列名は自治体・年度でぶれるため、キーワード一致で拾う方式にしてある。
 """
 import csv, glob, os, re, sys
-from common import norm_code, open_csv, is_blocked, log
+from common import norm_code, norm_phone, open_csv, is_blocked, log
 
-CODE_HINTS = ["医療機関コード", "機関コード", "kikanCd", "医療機関番号"]
-URL_HINTS  = ["ホームページ", "ＵＲＬ", "URL", "url", "ウェブサイト", "アドレス"]
+CODE_HINTS  = ["医療機関コード", "機関コード", "kikanCd", "医療機関番号"]
+URL_HINTS   = ["ホームページ", "ＵＲＬ", "URL", "url", "ウェブサイト", "アドレス"]
+PHONE_HINTS = ["電話番号", "電話", "TEL", "ＴＥＬ"]
 
 
 def pick(header, hints):
@@ -24,7 +25,9 @@ def pick(header, hints):
 
 
 def load_opendata(dirpath):
-    table = {}
+    """コードと電話番号の両方で引ける表を作る。元データにコード列が無い場合は
+    電話番号が唯一の確実な結合キーになる。"""
+    table = {"code": {}, "phone": {}}
     files = sorted(glob.glob(os.path.join(dirpath, "**", "*.csv"), recursive=True))
     if not files:
         log(f"[warn] {dirpath} にCSVがありません。STEP2はスキップされます。")
@@ -32,19 +35,23 @@ def load_opendata(dirpath):
         f = open_csv(p)
         rd = csv.DictReader(f)
         hdr = rd.fieldnames or []
-        cc, uc = pick(hdr, CODE_HINTS), pick(hdr, URL_HINTS)
-        if not cc or not uc:
-            log(f"[skip] 列を特定できず: {os.path.basename(p)} (code={cc}, url={uc})")
+        cc, uc, pc = pick(hdr, CODE_HINTS), pick(hdr, URL_HINTS), pick(hdr, PHONE_HINTS)
+        if not uc or not (cc or pc):
+            log(f"[skip] 列を特定できず: {os.path.basename(p)} "
+                f"(code={cc}, phone={pc}, url={uc})")
             f.close()
             continue
         n = 0
         for r in rd:
-            code, url = norm_code(r.get(cc)), (r.get(uc) or "").strip()
-            if len(code) < 9 or not url.lower().startswith("http"):
+            url = (r.get(uc) or "").strip()
+            if not url.lower().startswith("http") or is_blocked(url):
                 continue
-            if is_blocked(url):
-                continue
-            table.setdefault(code, url)
+            code = norm_code(r.get(cc)) if cc else ""
+            phone = norm_phone(r.get(pc)) if pc else ""
+            if len(code) >= 9:
+                table["code"].setdefault(code, url)
+            if len(phone) >= 9:
+                table["phone"].setdefault(phone, url)
             n += 1
         f.close()
         log(f"[load] {os.path.basename(p)}: URL付き {n}件")
@@ -65,10 +72,13 @@ def main(work_path, opendata_dir):
         if r["ウェブサイトURL"].strip():
             already += 1
             r["取得元"] = "元データ"
-        elif r["医療機関コード"] in table:
-            r["ウェブサイトURL"] = table[r["医療機関コード"]]
-            r["取得元"] = "オープンデータ"
-            filled += 1
+        else:
+            url = (table["code"].get(r["医療機関コード"])
+                   or table["phone"].get(norm_phone(r.get("電話番号", ""))))
+            if url:
+                r["ウェブサイトURL"] = url
+                r["取得元"] = "オープンデータ"
+                filled += 1
         out.writerow(r)
     f.close()
     log(f"[opendata] 全{total}件 / 元から埋まっていた {already}件 / "
