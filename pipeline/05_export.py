@@ -36,13 +36,13 @@ def main(work_path, verified_path, out_prefix):
              "未検出": 0, "未処理": 0}
     applied = 0
     for r in rows:
-        url, conf, why = r["ウェブサイトURL"].strip(), "", ""
-        src = r.get("取得元", "")
+        url, conf, why = (r.get("ウェブサイトURL") or "").strip(), "", ""
+        src = r.get("取得元") or ""
         if url:
             stats[src if src in stats else "元データ"] += 1
             conf = "高"
         else:
-            hit = ver.get(r["医療機関コード"])
+            hit = ver.get((r.get("医療機関コード") or "").strip())
             if not hit:
                 stats["未処理"] += 1
                 conf = "未処理"
@@ -53,12 +53,13 @@ def main(work_path, verified_path, out_prefix):
                 if conf in AUTO_APPLY:
                     url, src = hit["ウェブサイトURL"], "検索+照合"
         if url:
-            imp.writerow([r["レコードID"], url])
+            imp.writerow([r.get("レコードID") or "", url])
             applied += 1
-        aud.writerow([r["レコードID"], r["会社名"], r["医療機関コード"], r["郵便番号"],
-                      r["都道府県"], r["住所"], r.get("電話番号", ""), url, conf, src,
-                      why, r["重複グループID"], r["代表フラグ"],
-                      r.get("誤採用注意", ""), r["検索クエリ"]])
+        g = lambda k: r.get(k) or ""
+        aud.writerow([g("レコードID"), g("会社名"), g("医療機関コード"), g("郵便番号"),
+                      g("都道府県"), g("住所"), g("電話番号"), url, conf, src,
+                      why, g("重複グループID"), g("代表フラグ"),
+                      g("誤採用注意"), g("検索クエリ")])
 
     total = len(rows)
     log(f"[export] 全{total}件 / URL確定 {applied}件 ({applied / total:.1%})")

@@ -96,7 +96,8 @@ def main():
 
     f = open_csv(a.work)
     todo = [r for r in csv.DictReader(f)
-            if not r["ウェブサイトURL"].strip() and r["医療機関コード"] not in done]
+            if not (r.get("ウェブサイトURL") or "").strip()
+            and (r.get("医療機関コード") or "") not in done]
     f.close()
     if a.limit:
         todo = todo[:a.limit]
@@ -106,9 +107,9 @@ def main():
     with open(a.outfile, "a", encoding="utf-8") as out:
         for r in todo:
             try:
-                hits = run_query(r["検索クエリ"])
+                hits = run_query(r.get("検索クエリ") or "")
             except Exception as e:
-                log(f"[error] {r['医療機関コード']} {r['会社名']}: {e}")
+                log(f"[error] {r.get('医療機関コード')} {r.get('会社名')}: {e}")
                 break                      # キー切れ・上限超過は即停止して再開に任せる
             cands = [h for h in hits if h["url"] and not is_blocked(h["url"])]
             out.write(json.dumps({"医療機関コード": r["医療機関コード"],

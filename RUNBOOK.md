@@ -89,9 +89,10 @@ python3 pipeline/02_opendata.py data/out1_work.csv data/opendata/ > data/out1_wo
 ## パイロット（本番前に必ず実施）
 
 いきなり97,000件を流さない。先頭1,000件で実測する。
+（シェルの `head` は住所やビル名に改行が含まれる行を途中で切るため使わない。）
 
 ```bash
-head -1001 data/out1_work2.csv > data/pilot.csv
+python3 pipeline/head_csv.py data/out1_work2.csv 1000 > data/pilot.csv
 python3 pipeline/03_search.py data/pilot.csv data/pilot_cand.jsonl
 python3 pipeline/04_verify.py data/pilot_cand.jsonl data/pilot_verified.tsv
 python3 pipeline/05_export.py data/pilot.csv data/pilot_verified.tsv data/pilot
