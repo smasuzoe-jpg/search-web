@@ -193,3 +193,92 @@ python3 pipeline/05_export.py data/out1_work2.csv data/out1_verified.tsv data/ou
 
 残る3万件前後は空欄のまま `_audit.csv` に確度と判定根拠付きで残るので、
 後から人手を割ける段になったら、そこだけを対象に作業できる。
+
+---
+
+## 付録  検索APIキーの取得手順
+
+### 前提: 97,000件を完全無料で処理することはできない
+
+主要APIの無料枠は以下のとおり（**価格・上限は変動するため申込時に必ず確認**）。
+
+| API | 無料枠 | 97,000件を無料枠だけで処理した場合 |
+|---|---|---|
+| Google Custom Search | 100件/日 | 約2年8か月 |
+| Serper | 登録時2,500件（一回限り） | 不足 |
+| Brave Search | 約2,000件/月 | 約4年 |
+
+Microsoftの Bing Search API は提供終了しているため選択肢にならない。
+検索サイトを直接スクレイピングする方法は各社の利用規約で禁じられているため使わない。
+
+### 現実的な進め方
+
+1. **STEP2のオープンデータを先に使い切る。ここは完全に無料で上限もない。**
+   充足率次第で検索対象が半減する可能性がある。
+2. **パイロット1,000件は無料枠で回す。** Serverの登録時2,500件がちょうど収まる。
+   ここでオープンデータ充足率と「高」判定の適合率を実測する。
+3. 残件数が確定してから課金を判断する。Serperの実勢は10万件で50ドル前後なので、
+   **全件やっても数千円規模**に収まる見込み。想定より安いはず。
+
+---
+
+### Serper（推奨）
+
+1. https://serper.dev にGoogleアカウントでサインアップ
+2. 登録時点で2,500クレジットが無料付与される
+3. ダッシュボードの「API Key」をコピー
+4. 実行時に環境変数へ入れる
+
+```bash
+export SERPER_API_KEY=xxxxxxxxxxxxxxxx
+```
+
+`pipeline/config.py` の `SEARCH_PROVIDER` は既定で `"serper"`。変更不要。
+
+---
+
+### Google Custom Search（無料100件/日）
+
+1. https://console.cloud.google.com でプロジェクトを作成
+2. 「APIとサービス」→「ライブラリ」→ **Custom Search API** を有効化
+3. 「認証情報」→「認証情報を作成」→「APIキー」→ 発行された文字列が `GOOGLE_API_KEY`
+4. https://programmablesearchengine.google.com で検索エンジンを作成し、
+   **「ウェブ全体を検索」をON**にする（既定はサイト指定なので必ず切り替える）
+5. 発行された「検索エンジンID」が `GOOGLE_CSE_ID`
+
+```bash
+export GOOGLE_API_KEY=xxxxxxxxxxxxxxxx
+export GOOGLE_CSE_ID=xxxxxxxxxxxxxxxx
+```
+
+`config.py` で `SEARCH_PROVIDER = "google_cse"` に変更する。
+無料枠のみで使う場合は1日100件が上限なので、次のように区切って回す。
+
+```bash
+python3 pipeline/03_search.py data/out1_work2.csv data/out1_cand.jsonl --limit 100
+```
+
+課金を有効にすると1,000件5ドル、日次上限は10,000件になる。
+
+---
+
+### Brave Search（無料約2,000件/月）
+
+1. https://brave.com/search/api/ でアカウント作成
+2. 無料プランを選択（クレジットカード登録を求められる場合がある）
+3. ダッシュボードの「API Keys」から発行
+
+```bash
+export BRAVE_API_KEY=xxxxxxxxxxxxxxxx
+```
+
+`config.py` で `SEARCH_PROVIDER = "brave"`、`SEARCH_QPS = 1.0` に変更する
+（無料プランは毎秒1リクエスト制限のため）。
+
+---
+
+### キーの取り扱い
+
+- **環境変数のみで渡す。** スクリプトは環境変数からしか読まない。
+- リポジトリやスプレッドシートにキーを書かない。
+- 共有が必要な場合はパスワード管理ツール経由にする。
