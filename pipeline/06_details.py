@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-STEP6: 採取した診療時間テキストを列に整形する。
+STEP6: 採取した診療時間と診療科目を列に整形する。
 
-    python3 pipeline/06_hours.py data/list1_verified_hours.jsonl > data/list1_hours.csv
+    python3 pipeline/06_details.py data/list1_verified_details.jsonl > data/list1_details.csv
 
 サイト巡回は済んでいるので、この工程は何度でもやり直せる。
 解釈を変えたくなったらここだけ直して再実行すればよい。
 
 出力列:
     医療機関コード, 会社名, ウェブサイトURL, 診療時間の取得元,
-    診療時間（整形）, 休診日, 時間帯1, 時間帯2, 診療時間（原文）
+    診療時間（整形）, 休診日, 時間帯1, 時間帯2, 診療科目, 診療科目の出所,
+    診療時間（原文）
 """
 import csv, json, re, sys
 from common import nfkc, log
+from depts import departments_from_name
 
 CLOCK = re.compile(r"(\d{1,2})\s*[:：時]\s*(\d{1,2})?")
 RANGE = re.compile(r"(\d{1,2}\s*[:：時]\s*\d{0,2})\s*[~〜～\-−–—ー]\s*(\d{1,2}\s*[:：時]\s*\d{0,2})")
@@ -71,11 +73,27 @@ def summarize(payload):
     }
 
 
+def departments(payload):
+    """
+    出所の信頼度順に採用する。titleと見出しが最も確か。
+    サイトから取れないときは施設名から拾う（巡回不要で必ず動く保険）。
+    """
+    d = payload.get("診療科目") or {}
+    for key, label in (("title", "見出し"), ("section", "診療科目欄"), ("nav", "メニュー")):
+        if d.get(key):
+            return d[key], label
+    from_name = departments_from_name(payload.get("会社名", ""))
+    if from_name:
+        return from_name, "施設名"
+    return [], ""
+
+
 def main(path):
     w = csv.writer(sys.stdout)
     w.writerow(["医療機関コード", "会社名", "ウェブサイトURL", "診療時間の取得元",
-                "診療時間（整形）", "休診日", "時間帯1", "時間帯2", "診療時間（原文）"])
-    n = parsed = 0
+                "診療時間（整形）", "休診日", "時間帯1", "時間帯2",
+                "診療科目", "診療科目の出所", "診療時間（原文）"])
+    n = parsed = with_dept = 0
     for line in open(path, encoding="utf-8"):
         line = line.strip()
         if not line:
@@ -83,14 +101,20 @@ def main(path):
         p = json.loads(line)
         n += 1
         s = summarize(p)
+        depts, src = departments(p)
         if s["時間帯1"]:
             parsed += 1
+        if depts:
+            with_dept += 1
         w.writerow([p.get("医療機関コード", ""), p.get("会社名", ""),
                     p.get("ウェブサイトURL", ""), p.get("診療時間の取得元", ""),
                     s["診療時間（整形）"], s["休診日"], s["時間帯1"], s["時間帯2"],
-                    s["診療時間（原文）"]])
-    log(f"[hours] 採取 {n}件 / 時間帯を読み取れたもの {parsed}件 "
-        f"({parsed / n:.1%})" if n else "[hours] 0件")
+                    "・".join(depts), src, s["診療時間（原文）"]])
+    if n:
+        log(f"[details] {n}件 / 診療時間 {parsed}件 ({parsed / n:.1%}) "
+            f"/ 診療科目 {with_dept}件 ({with_dept / n:.1%})")
+    else:
+        log("[details] 0件")
 
 
 if __name__ == "__main__":

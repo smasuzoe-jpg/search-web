@@ -39,11 +39,11 @@ run python3 "$HERE/04_verify.py" "${OUT}_cand.jsonl" "${OUT}_verified.tsv"
 # STEP5 出力。「高」のみ自動反映
 run python3 "$HERE/05_export.py" "${OUT}_work2.csv" "${OUT}_verified.tsv" "$OUT"
 
-# STEP6 診療時間の整形（サイト巡回済みなので何度でもやり直せる）
-[ -f "${OUT}_verified_hours.jsonl" ] && \
-  run python3 "$HERE/06_hours.py" "${OUT}_verified_hours.jsonl" > "${OUT}_hours.csv"
+# STEP6 診療時間と診療科目の整形（サイト巡回済みなので何度でもやり直せる）
+[ -f "${OUT}_verified_details.jsonl" ] && \
+  run python3 "$HERE/06_details.py" "${OUT}_verified_details.jsonl" > "${OUT}_details.csv"
 
 echo "=== $(date) done $IN ===" >> "$LOG"
 echo "取込用: ${OUT}_import.csv"
 echo "監査用: ${OUT}_audit.csv"
-echo "診療時間: ${OUT}_hours.csv"
+echo "診療時間・科目: ${OUT}_details.csv"

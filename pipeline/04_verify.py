@@ -16,6 +16,7 @@ from common import (norm_name, norm_phone, addr_numbers, city_part, nfkc, log,
 from config import (VERIFY_CONCURRENCY, VERIFY_TIMEOUT, VERIFY_USER_AGENT,
                     CONFIDENCE_HIGH, CONFIDENCE_MID, SUBPAGE_HINTS)
 from hours import extract_hours, has_hours, HOURS_LINK_HINTS
+from depts import extract_departments
 
 TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
 _robots, _rlock = {}, threading.Lock()
@@ -155,6 +156,7 @@ def judge(rec):
     pts, url, why, html = best
     conf = "高" if pts >= CONFIDENCE_HIGH else ("中" if pts >= CONFIDENCE_MID else "低")
     payload, src = hours_from(html, url)
+    payload["診療科目"] = extract_departments(html)
     payload["医療機関コード"] = rec["医療機関コード"]
     payload["会社名"] = rec.get("会社名", "")
     payload["ウェブサイトURL"] = url
@@ -179,13 +181,13 @@ def main(cand_path, out_path):
                 recs.append(r)
     log(f"[verify] 対象 {len(recs)}件 並列={VERIFY_CONCURRENCY}")
 
-    # 診療時間はサイトを開いたこの一度きりしか採れないので、必ず同時に保存する。
-    hours_path = re.sub(r"\.tsv$", "", out_path) + "_hours.jsonl"
+    # 診療時間も診療科目も、サイトを開いたこの一度きりしか採れない。必ず同時に保存する。
+    details_path = re.sub(r"\.tsv$", "", out_path) + "_details.jsonl"
 
     new = not os.path.exists(out_path)
     got_hours = 0
     with open(out_path, "a", encoding="utf-8") as out, \
-         open(hours_path, "a", encoding="utf-8") as hout:
+         open(details_path, "a", encoding="utf-8") as hout:
         if new:
             out.write("医療機関コード\t会社名\tウェブサイトURL\t確度\t判定根拠\n")
         with cf.ThreadPoolExecutor(VERIFY_CONCURRENCY) as ex:
@@ -199,15 +201,16 @@ def main(cand_path, out_path):
                     url, conf, why = "", "未検出", f"照合エラー: {e}"
                 out.write("\t".join([r["医療機関コード"], r["会社名"],
                                      url or "（未検出）", conf, why]) + "\n")
-                if payload and has_hours(payload):
+                if payload:
                     hout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-                    got_hours += 1
+                    if has_hours(payload):
+                        got_hours += 1
                 if i % 50 == 0:
                     out.flush(); hout.flush()   # ドライブ上の書き込みは50件ごとにまとめる
                 if i % 500 == 0:
                     log(f"  ... {i}/{len(recs)}  診療時間 {got_hours}件")
             out.flush(); hout.flush()
-    log(f"[verify] 完了 / 診療時間を採取 {got_hours}件 -> {hours_path}")
+    log(f"[verify] 完了 / 診療時間を採取 {got_hours}件 -> {details_path}")
 
 
 if __name__ == "__main__":
