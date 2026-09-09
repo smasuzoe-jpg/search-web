@@ -1,43 +1,67 @@
-# 医療機関ホームページURL一括付与 手順書
+# 医療機関ホームページURL一括付与 手順書（確定版）
 
-97,000件を対話型の1件ずつ検索で処理するのは不可能なため、
-**公的オープンデータで一括充足 → 残りだけ検索API → 機械照合** の順で処理する。
+対象97,000件。方針は **「高」判定のみ自動反映**。中・低・未検出は空欄のまま監査CSVに残す。
+
+想定充足率は6〜7割、機械処理は3ファイル並列で1日以内。
 
 ---
 
-## 0. 準備
+## 前提
+
+- **この作業は実行者のPCまたはサーバーで行う。** Claude側の実行環境は検索API・
+  医療機関サイト・厚労省の配信元がすべて組織の通信ポリシーで遮断されており、
+  STEP2以降を動かせない。
+- 検索APIキーが必要（Serper推奨。理由はSTEP3参照）。
 
 ```bash
 pip install -r pipeline/requirements.txt
-cd /path/to/search-web
 ```
 
-### 元データの再エクスポート（重要）
+Googleスプレッドシートの リスト①②③ を、それぞれCSVで
+`data/list1.csv` `data/list2.csv` `data/list3.csv` として書き出す。
+3ファイルは重複なく分割済み（一意のレコードIDで検証済み）。
 
-HubSpotから出す際に **電話番号列を必ず含める**。
-現行エクスポートは7列で電話番号がなく、STEP4の照合精度が大きく落ちる。
-電話番号があれば「同一ビル内の別診療科」をほぼ確実に弾ける。
+想定列: レコードID / 会社名 / 医療機関コード（正） / 郵便番号 / 都道府県／地域 / 市区町村 / 電話番号
 
-必要な列: レコードID / 会社名 / 医療機関コード / 郵便番号 / 都道府県 / 住所 / 電話番号 / ウェブサイトURL
+---
+
+## 一括実行
+
+```bash
+export SERPER_API_KEY=xxxxx        # キーは環境変数のみ。ファイルに書かない
+./pipeline/run_all.sh data/list1.csv data/out1 &
+./pipeline/run_all.sh data/list2.csv data/out2 &
+./pipeline/run_all.sh data/list3.csv data/out3 &
+wait
+```
+
+各STEPは中断・再開できる。落ちたら同じコマンドを再実行すれば続きから走る。
+STEPごとに個別に流したい場合は以下を参照。
 
 ---
 
 ## STEP1  正規化と重複判定
 
 ```bash
-python3 pipeline/01_prepare.py data/hubspot_202609.csv > data/work.csv
+python3 pipeline/01_prepare.py data/list1.csv > data/out1_work.csv
 ```
 
 医療機関コード（10桁・1施設1コード・改称や移転でも不変）を主キーにする。
-施設名や住所で名寄せしてはいけない。4,764件で検証した結果:
+欠損時は電話番号、次に郵便番号＋施設名にフォールバックする。
+
+**先頭ゼロの補正を内部で行う。** 表計算ソフト経由のエクスポートでは、
+都道府県番号が1桁の北海道(01)から栃木(09)までのコードが9桁になって届く。
+10桁へゼロ詰めしないとSTEP2の突合がその9県で丸ごと失敗する。
+
+施設名や住所での名寄せはしない。4,764件で検証した結果:
 
 | 判定キー | 重複グループ | 実態 |
 |---|---|---|
-| 医療機関コード | 0組 | 真の重複なし。コードは一意キーとして使える |
+| 医療機関コード | 0組 | 真の重複なし。一意キーとして使える |
 | 施設名（正規化） | 64組 186行 | **同名の別施設**。潰すと別法人が消える |
 | 郵便番号＋住所 | 15組 32行 | **同一ビル内の別診療科**。潰すと別施設が消える |
 
-後者2つは重複ではないので統合せず、`誤採用注意` 列に印を付けて後工程に渡す。
+後者2つは統合せず `誤採用注意` 列に印を付けて後工程に渡す。
 
 ---
 
@@ -51,45 +75,42 @@ python3 pipeline/01_prepare.py data/hubspot_202609.csv > data/work.csv
 2. 実行する
 
 ```bash
-python3 pipeline/02_opendata.py data/work.csv data/opendata/ > data/work2.csv
+python3 pipeline/02_opendata.py data/out1_work.csv data/opendata/ > data/out1_work2.csv
 ```
 
-列名は年度・自治体でぶれるため、コード列とURL列はキーワードで自動検出する。
-`[skip] 列を特定できず` が出たら `pipeline/config.py` の `CODE_HINTS` / `URL_HINTS`
-に実際の列名の一部を足す。
+医療機関コードと電話番号の両方で引く。列名は年度・自治体でぶれるためキーワードで
+自動検出する。`[skip] 列を特定できず` が出たら `pipeline/config.py` の
+`CODE_HINTS` / `URL_HINTS` / `PHONE_HINTS` に実際の列名の一部を足す。
 
-**この工程の充足率が全体の費用を決める。** 最初に必ず測ること（下記STEP0.5）。
+**この工程の充足率が検索API課金額を決める。** 必ずパイロットで先に測る。
 
 ---
 
-## STEP0.5  1,000件でパイロット（本番前に必ず実施）
+## パイロット（本番前に必ず実施）
 
-いきなり97,000件を流さない。先頭1,000件で実測し、費用と精度を確定させる。
+いきなり97,000件を流さない。先頭1,000件で実測する。
 
 ```bash
-head -1001 data/work2.csv > data/pilot.csv
+head -1001 data/out1_work2.csv > data/pilot.csv
 python3 pipeline/03_search.py data/pilot.csv data/pilot_cand.jsonl
 python3 pipeline/04_verify.py data/pilot_cand.jsonl data/pilot_verified.tsv
 python3 pipeline/05_export.py data/pilot.csv data/pilot_verified.tsv data/pilot
 ```
 
-`data/pilot_audit.csv` を目視し、次の3点を決める:
+`data/pilot_audit.csv` を目視し、3点を確認する。
 
 - STEP2の充足率 → 検索API課金額が確定する
-- 「高」判定の適合率 → 目標95%以上。低ければ `config.py` の `CONFIDENCE_HIGH` を上げる
-- 「高」なのに誤りだった行の傾向 → `BLOCKED_DOMAINS` に足す
+- **「高」判定の適合率 → 今回は「高」を無条件で反映するので最重要。95%を下回るなら
+  `config.py` の `CONFIDENCE_HIGH` を4から5へ上げる**
+- 「高」なのに誤っていた行の傾向 → `BLOCKED_DOMAINS` に足す
 
 ---
 
-## STEP3  残りを検索APIで機械実行
+## STEP3  残りを検索API
 
 ```bash
-export SERPER_API_KEY=xxxxx          # キーは環境変数のみ。ファイルに書かない
-python3 pipeline/03_search.py data/work2.csv data/candidates.jsonl
+python3 pipeline/03_search.py data/out1_work2.csv data/out1_cand.jsonl
 ```
-
-中断しても再開できる（処理済みコードは自動でスキップ）。
-`--limit N` で1回の実行量を絞れる。
 
 クエリは `施設名（分院名まで）+ 市区町村 + 公式サイト`。
 ポータル・口コミ・求人・地図・SNSの約60ドメインを除外済み。これが効率の要で、
@@ -103,15 +124,15 @@ python3 pipeline/03_search.py data/work2.csv data/candidates.jsonl
 | Brave Search | 数ドル | プラン次第 | 半日〜 |
 | Google Custom Search | 5ドル | **10,000件/日** | **10日** |
 
-Google CSEは日次上限があるため、97,000件では10日かかる。急ぐならSerperを選ぶ。
+Google CSEは日次上限があるため97,000件では10日かかる。Serperを推奨。
 `config.py` の `SEARCH_PROVIDER` で切り替える。
 
 ---
 
-## STEP4  候補URLを開いて機械照合（精度の要）
+## STEP4  候補ページを開いて機械照合（精度の要）
 
 ```bash
-python3 pipeline/04_verify.py data/candidates.jsonl data/verified.tsv
+python3 pipeline/04_verify.py data/out1_cand.jsonl data/out1_verified.tsv
 ```
 
 候補ページを実際に取得し、本文から電話番号・番地・施設名・市区町村を突合して採点する。
@@ -123,7 +144,7 @@ python3 pipeline/04_verify.py data/candidates.jsonl data/verified.tsv
 | 施設名 | 2 |
 | 市区町村 | 1 |
 
-合計4点以上を「高」、3点を「中」、それ未満を「低」とする。
+合計4点以上が「高」、3点が「中」、それ未満が「低」。
 トップページで4点に届かない場合はアクセス・概要ページも見に行く。
 
 実データの罠で検証済み:
@@ -132,43 +153,43 @@ python3 pipeline/04_verify.py data/candidates.jsonl data/verified.tsv
 |---|---|---|
 | 正しい公式サイト | 8 | 高（自動反映） |
 | 同名別施設（松戸の田代内科 vs 世田谷の同名院） | 2 | 低（不採用） |
-| 同一ビル別科（戸越パークビル2階の呼吸器内科 vs こどもクリニック） | 3 | 中（人が確認） |
+| 同一ビル別科（戸越パークビル2階の呼吸器内科 vs こどもクリニック） | 3 | 中（不採用） |
 
-robots.txt を尊重し、同一ホストへは1秒以上あける。並列数は `config.py` で調整。
-所要は97,000件で概ね5〜8時間。
+同一ビル別科が「高」に届かないのが重要。住所と市区町村は一致してしまうため、
+**電話番号が入っていることが誤採用を防ぐ決め手**になっている。
+
+robots.txt を尊重し、同一ホストへは1秒以上あける。並列数は `config.py` の
+`VERIFY_CONCURRENCY`（既定8）で調整する。16に上げると所要はほぼ半減する。
 
 ---
 
 ## STEP5  出力
 
 ```bash
-python3 pipeline/05_export.py data/work2.csv data/verified.tsv data/out
+python3 pipeline/05_export.py data/out1_work2.csv data/out1_verified.tsv data/out1
 ```
 
-- `data/out_import.csv` … レコードIDとURLのみ。HubSpotへ戻す用。**「高」のみ反映**
-- `data/out_audit.csv` … 全項目＋確度＋判定根拠＋誤採用注意。人の確認用
+- `data/out1_import.csv` … レコードIDとURLのみ。HubSpotへ戻す用。**「高」のみ**
+- `data/out1_audit.csv` … 全項目＋確度＋判定根拠＋誤採用注意。人の確認用
 
-「中」「低」は自動反映しない。監査CSVで確認してから `AUTO_APPLY` を広げる。
+「高」以外が取込用に混ざらないことは実データ4,764件で検証済み。
+後から「中」も採用する方針に変えるときは `05_export.py` の
+`AUTO_APPLY` に `"中"` を足して再実行すればよい。STEP3・STEP4は再実行不要。
 
 ---
 
-## 全体の想定
+## 想定
 
 | 工程 | 所要 | 費用 |
 |---|---|---|
 | STEP1 正規化 | 数分 | 0 |
-| STEP2 オープンデータ | 半日（DLと列合わせ） | 0 |
-| STEP3 検索API | 数時間 | 30〜300ドル |
-| STEP4 照合 | 5〜8時間 | 0 |
+| STEP2 オープンデータ | 半日（DLと列合わせ、ほぼ人手） | 0 |
+| パイロット | 1〜2時間 | 数ドル |
+| STEP3 検索API | 数時間（3並列） | 30〜300ドル |
+| STEP4 照合 | 6〜20時間（3並列で1/3） | 0 |
 | STEP5 出力 | 数分 | 0 |
-| 目視確認（残差） | 件数次第 | 人件費 |
 
-STEP2の充足率が読めないため、費用の幅が大きい。パイロットで先に確定させること。
+3ファイル並列で **機械処理は1日以内**。充足率6〜7割で約58,000〜68,000件にURLが入る。
 
----
-
-## 対象の絞り込み
-
-97,000件すべてにURLが必要か、先に確認することを勧める。
-営業対象の都道府県や診療科で絞れば、費用と時間はそのまま比例して減る。
-STEP1の出力を絞り込んでからSTEP3に渡せばよい。
+残る3万件前後は空欄のまま `_audit.csv` に確度と判定根拠付きで残るので、
+後から人手を割ける段になったら、そこだけを対象に作業できる。
