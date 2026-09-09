@@ -15,6 +15,7 @@ from common import (norm_name, norm_phone, addr_numbers, city_part, nfkc, log,
                     is_blocked_for)
 from config import (VERIFY_CONCURRENCY, VERIFY_TIMEOUT, VERIFY_USER_AGENT,
                     CONFIDENCE_HIGH, CONFIDENCE_MID, SUBPAGE_HINTS)
+from hours import extract_hours, has_hours, HOURS_LINK_HINTS
 
 TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
 _robots, _rlock = {}, threading.Lock()
@@ -63,16 +64,17 @@ def fetch(url):
         return ""
 
 
-def subpage_urls(html, base):
-    """アクセス・概要ページのリンクを最大2件拾う。番地や電話はここにあることが多い。"""
+def subpage_urls(html, base, hints=None, limit=2):
+    """下層ページのリンクを拾う。既定はアクセス・概要ページ。"""
+    hints = hints or SUBPAGE_HINTS
     out = []
     for m in re.finditer(r'href=["\']([^"\']+)["\']', html, re.I):
         href = m.group(1)
-        if any(h in href.lower() for h in SUBPAGE_HINTS):
+        if any(h in href.lower() for h in hints):
             u = urljoin(base, href)
             if urlparse(u).netloc == urlparse(base).netloc and u not in out:
                 out.append(u)
-        if len(out) >= 2:
+        if len(out) >= limit:
             break
     return out
 
@@ -109,6 +111,20 @@ def score(rec, text):
     return pts, why
 
 
+def hours_from(html, url):
+    """採用したページから診療時間を採る。無ければ診療案内ページを1枚だけ見に行く。"""
+    payload = extract_hours(html)
+    if has_hours(payload):
+        return payload, url
+    for sub in subpage_urls(html, url, hints=HOURS_LINK_HINTS, limit=2):
+        h2 = fetch(sub)
+        if h2:
+            p2 = extract_hours(h2)
+            if has_hours(p2):
+                return p2, sub
+    return payload, ""
+
+
 def judge(rec):
     best = None
     for c in rec.get("候補", []):
@@ -128,17 +144,22 @@ def judge(rec):
                     if p2 > pts:
                         pts, why = p2, w2 + ["下層ページで確認"]
         if best is None or pts > best[0]:
-            best = (pts, url, why)
+            best = (pts, url, why, html)
         if pts >= CONFIDENCE_HIGH + 2:            # 満点近ければ以降の候補は見ない
             break
 
     if not best or best[0] < 2:
         top = rec["候補"][0]["url"] if rec.get("候補") else ""
         return ["", "未検出", f"候補{len(rec.get('候補', []))}件すべて照合不一致"
-                              + (f"（最有力 {top}）" if top else "")]
-    pts, url, why = best
+                              + (f"（最有力 {top}）" if top else ""), None]
+    pts, url, why, html = best
     conf = "高" if pts >= CONFIDENCE_HIGH else ("中" if pts >= CONFIDENCE_MID else "低")
-    return [url, conf, f"{'・'.join(why)}（スコア{pts}）"]
+    payload, src = hours_from(html, url)
+    payload["医療機関コード"] = rec["医療機関コード"]
+    payload["会社名"] = rec.get("会社名", "")
+    payload["ウェブサイトURL"] = url
+    payload["診療時間の取得元"] = src
+    return [url, conf, f"{'・'.join(why)}（スコア{pts}）", payload]
 
 
 def main(cand_path, out_path):
@@ -158,26 +179,35 @@ def main(cand_path, out_path):
                 recs.append(r)
     log(f"[verify] 対象 {len(recs)}件 並列={VERIFY_CONCURRENCY}")
 
+    # 診療時間はサイトを開いたこの一度きりしか採れないので、必ず同時に保存する。
+    hours_path = re.sub(r"\.tsv$", "", out_path) + "_hours.jsonl"
+
     new = not os.path.exists(out_path)
-    with open(out_path, "a", encoding="utf-8") as out:
+    got_hours = 0
+    with open(out_path, "a", encoding="utf-8") as out, \
+         open(hours_path, "a", encoding="utf-8") as hout:
         if new:
             out.write("医療機関コード\t会社名\tウェブサイトURL\t確度\t判定根拠\n")
         with cf.ThreadPoolExecutor(VERIFY_CONCURRENCY) as ex:
             futs = {ex.submit(judge, r): r for r in recs}
             for i, fut in enumerate(cf.as_completed(futs), 1):
                 r = futs[fut]
+                payload = None
                 try:
-                    url, conf, why = fut.result()
+                    url, conf, why, payload = fut.result()
                 except Exception as e:
                     url, conf, why = "", "未検出", f"照合エラー: {e}"
                 out.write("\t".join([r["医療機関コード"], r["会社名"],
                                      url or "（未検出）", conf, why]) + "\n")
+                if payload and has_hours(payload):
+                    hout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+                    got_hours += 1
                 if i % 50 == 0:
-                    out.flush()          # ドライブ上での書き込みを50件ごとにまとめる
+                    out.flush(); hout.flush()   # ドライブ上の書き込みは50件ごとにまとめる
                 if i % 500 == 0:
-                    log(f"  ... {i}/{len(recs)}")
-            out.flush()
-    log("[verify] 完了")
+                    log(f"  ... {i}/{len(recs)}  診療時間 {got_hours}件")
+            out.flush(); hout.flush()
+    log(f"[verify] 完了 / 診療時間を採取 {got_hours}件 -> {hours_path}")
 
 
 if __name__ == "__main__":
