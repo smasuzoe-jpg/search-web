@@ -8,9 +8,14 @@ STEP6: 採取した診療時間と診療科目を列に整形する。
 解釈を変えたくなったらここだけ直して再実行すればよい。
 
 出力列:
-    医療機関コード, 会社名, ウェブサイトURL, 診療時間の取得元,
-    診療時間（整形）, 休診日, 時間帯1, 時間帯2, 診療科目, 診療科目の出所,
-    診療時間（原文）
+    医療機関コード, 会社名, ウェブサイトURL,
+    診療時間（整形）, 休診日,
+    時間帯1開始, 時間帯1終了, 時間帯2開始, 時間帯2終了, 時間帯3開始, 時間帯3終了,
+    診療科目, 診療科目1〜5, 診療科目数, 診療科目の出所,
+    診療時間の取得元, 診療時間（原文）
+
+時間帯は開始と終了を別のセルに分ける。「18時以降も診療している医院」のような
+絞り込みが表計算ソフトでそのままできる。
 """
 import csv, json, re, sys
 from common import nfkc, log
@@ -54,34 +59,54 @@ def closed_days(text):
     return tail[:40]
 
 
+MAX_SLOTS = 3      # 朝・昼・夜の3診制まで対応する
+MAX_DEPTS = 8      # 診療科目を個別セルに展開する上限
+
+
 def summarize(payload):
     # 表には時間帯が、周辺テキストには休診日が入っていることが多いので両方見る
     raw = "\n".join((payload.get("tables") or []) + (payload.get("context") or [])).strip()
-    ranges = time_ranges(raw)
+    ranges = time_ranges(raw)[:MAX_SLOTS]
     closed = closed_days(raw)
     parts = []
     if ranges:
-        parts.append(" / ".join(ranges[:4]))
+        parts.append(" / ".join(ranges))
     if closed:
         parts.append(f"休診: {closed}")
+
+    slots = []
+    for i in range(MAX_SLOTS):
+        if i < len(ranges):
+            st, en = ranges[i].split("-", 1)
+        else:
+            st = en = ""
+        slots += [st, en]
+
     return {
         "診療時間（整形）": "　".join(parts),
         "休診日": closed,
-        "時間帯1": ranges[0] if len(ranges) > 0 else "",
-        "時間帯2": ranges[1] if len(ranges) > 1 else "",
+        "時間帯": slots,          # [開始1, 終了1, 開始2, 終了2, 開始3, 終了3]
         "診療時間（原文）": re.sub(r"\s*\n\s*", " / ", raw)[:900],
     }
 
 
 def departments(payload):
     """
-    出所の信頼度順に採用する。titleと見出しが最も確か。
-    サイトから取れないときは施設名から拾う（巡回不要で必ず動く保険）。
+    出所をまたいで統合する。見出しだけだと標榜科の一部しか載っていないことが多く、
+    診療科目欄のほうが網羅的なため、信頼できる順に並べたうえで全部拾う。
+    サイトから何も取れないときは施設名から拾う（巡回不要で必ず動く保険）。
     """
     d = payload.get("診療科目") or {}
+    merged, sources = [], []
     for key, label in (("title", "見出し"), ("section", "診療科目欄"), ("nav", "メニュー")):
-        if d.get(key):
-            return d[key], label
+        hits = d.get(key) or []
+        if hits:
+            sources.append(label)
+        for x in hits:
+            if x not in merged:
+                merged.append(x)
+    if merged:
+        return merged, "+".join(sources)
     from_name = departments_from_name(payload.get("会社名", ""))
     if from_name:
         return from_name, "施設名"
@@ -90,9 +115,14 @@ def departments(payload):
 
 def main(path):
     w = csv.writer(sys.stdout)
-    w.writerow(["医療機関コード", "会社名", "ウェブサイトURL", "診療時間の取得元",
-                "診療時間（整形）", "休診日", "時間帯1", "時間帯2",
-                "診療科目", "診療科目の出所", "診療時間（原文）"])
+    slot_cols = []
+    for i in range(1, MAX_SLOTS + 1):
+        slot_cols += [f"時間帯{i}開始", f"時間帯{i}終了"]
+    dept_cols = [f"診療科目{i}" for i in range(1, MAX_DEPTS + 1)]
+    w.writerow(["医療機関コード", "会社名", "ウェブサイトURL",
+                "診療時間（整形）", "休診日"] + slot_cols +
+               ["診療科目"] + dept_cols + ["診療科目数", "診療科目の出所",
+                "診療時間の取得元", "診療時間（原文）"])
     n = parsed = with_dept = 0
     for line in open(path, encoding="utf-8"):
         line = line.strip()
@@ -102,14 +132,16 @@ def main(path):
         n += 1
         s = summarize(p)
         depts, src = departments(p)
-        if s["時間帯1"]:
+        if s["時間帯"][0]:
             parsed += 1
         if depts:
             with_dept += 1
+        d5 = (depts + [""] * MAX_DEPTS)[:MAX_DEPTS]
         w.writerow([p.get("医療機関コード", ""), p.get("会社名", ""),
-                    p.get("ウェブサイトURL", ""), p.get("診療時間の取得元", ""),
-                    s["診療時間（整形）"], s["休診日"], s["時間帯1"], s["時間帯2"],
-                    "・".join(depts), src, s["診療時間（原文）"]])
+                    p.get("ウェブサイトURL", ""),
+                    s["診療時間（整形）"], s["休診日"]] + s["時間帯"] +
+                   ["・".join(depts)] + d5 + [len(depts), src,
+                    p.get("診療時間の取得元", ""), s["診療時間（原文）"]])
     if n:
         log(f"[details] {n}件 / 診療時間 {parsed}件 ({parsed / n:.1%}) "
             f"/ 診療科目 {with_dept}件 ({with_dept / n:.1%})")
