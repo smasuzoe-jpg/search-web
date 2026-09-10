@@ -28,6 +28,12 @@ def norm_code(s):
     return re.sub(r"\D", "", s or "")
 
 
+def format_zip(s):
+    """出力用に 1120013 -> 112-0013 に整える。"""
+    d = re.sub(r"\D", "", s or "")
+    return f"{d[:3]}-{d[3:7]}" if len(d) == 7 else (s or "").strip()
+
+
 def norm_hospital_code(s):
     """医療機関コードを10桁に揃える。表計算ソフトが先頭の0を落とすため、
     北海道(01)〜栃木(09)など都道府県番号が1桁の県のコードが9桁になって届く。

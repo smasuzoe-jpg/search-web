@@ -12,7 +12,8 @@ STEP1: HubSpotエクスポートを正規化し、重複グループと検索ク
 """
 import csv, sys
 from collections import defaultdict
-from common import (norm_name, norm_hospital_code, norm_zip, norm_phone, build_query,
+from common import (norm_name, norm_hospital_code, norm_zip, norm_phone,
+                    format_zip, build_query,
                     resolve_columns, open_csv, log)
 
 OUT_COLS = ["レコードID", "会社名", "医療機関コード", "郵便番号", "都道府県",
@@ -87,7 +88,8 @@ def main(path):
     w = csv.writer(sys.stdout)
     w.writerow(OUT_COLS)
     for r in rows:
-        w.writerow([r["record_id"], r["name"], norm_hospital_code(r["code"]), norm_zip(r["zip"]),
+        w.writerow([r["record_id"], r["name"], norm_hospital_code(r["code"]),
+                    format_zip(r["zip"]),
                     r["pref"], r["addr"], r["phone"], r["url"], norm_name(r["name"]),
                     r["_kind"], r["_gid"], r["_rep"], r["_warn"],
                     build_query(r["name"], r["addr"])])

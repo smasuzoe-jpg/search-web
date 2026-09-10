@@ -44,6 +44,11 @@ run python3 "$HERE/05_export.py" "${OUT}_work2.csv" "${OUT}_verified.tsv" "$OUT"
   run python3 "$HERE/06_details.py" "${OUT}_verified_details.jsonl" > "${OUT}_details.csv"
 
 echo "=== $(date) done $IN ===" >> "$LOG"
+# STEP7 監査用と診療時間・科目を1本にまとめる
+[ -f "${OUT}_details.csv" ] && \
+  run python3 "$HERE/07_merge.py" "${OUT}_audit.csv" "${OUT}_details.csv" > "${OUT}_all.csv"
+
+echo "全項目: ${OUT}_all.csv"
 echo "取込用: ${OUT}_import.csv"
 echo "監査用: ${OUT}_audit.csv"
 echo "診療時間・科目: ${OUT}_details.csv"

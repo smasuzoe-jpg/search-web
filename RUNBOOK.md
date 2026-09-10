@@ -189,8 +189,18 @@ robots.txt を尊重し、同一ホストへは1秒以上あける。並列数�
 python3 pipeline/05_export.py data/out1_work2.csv data/out1_verified.tsv data/out1
 ```
 
+- `data/out1_all.csv` … **全43項目を1本にまとめたもの。まずこれを見る**
 - `data/out1_import.csv` … レコードIDとURLのみ。HubSpotへ戻す用。**「高」のみ**
-- `data/out1_audit.csv` … 全項目＋確度＋判定根拠＋誤採用注意。人の確認用
+- `data/out1_audit.csv` … 基本項目＋確度＋判定根拠＋誤採用注意
+- `data/out1_details.csv` … 診療時間・診療科目
+
+## STEP7  1本にまとめる
+
+```bash
+python3 pipeline/07_merge.py data/out1_audit.csv data/out1_details.csv > data/out1_all.csv
+```
+
+医療機関コードで突き合わせる。コードが空の施設はウェブサイトURLで突き合わせる。
 
 ### 診療時間と診療科目を列に整形する
 
