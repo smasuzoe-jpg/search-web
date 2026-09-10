@@ -11,15 +11,19 @@ STEP6: 採取した診療時間と診療科目を列に整形する。
     医療機関コード, 会社名, ウェブサイトURL,
     診療時間（整形）, 休診日,
     時間帯1開始, 時間帯1終了, 時間帯2開始, 時間帯2終了, 時間帯3開始, 時間帯3終了,
-    診療科目, 診療科目1〜5, 診療科目数, 診療科目の出所,
+    診療科目, 診療科目1〜8, 診療科目数, 診療科目の出所,
+    基本領域, 基本領域1〜5, 基本領域数,
     診療時間の取得元, 診療時間（原文）
 
 時間帯は開始と終了を別のセルに分ける。「18時以降も診療している医院」のような
 絞り込みが表計算ソフトでそのままできる。
+
+診療科目は2軸で出す。標榜科そのまま（細かい）と、基本領域19診療科へ畳んだもの
+（粗い）。集計は基本領域、個別の見極めは標榜科、と使い分けられる。
 """
 import csv, json, re, sys
 from common import nfkc, log
-from depts import departments_from_name
+from depts import departments_from_name, to_basic_areas
 
 CLOCK = re.compile(r"(\d{1,2})\s*[:：時]\s*(\d{1,2})?")
 RANGE = re.compile(r"(\d{1,2}\s*[:：時]\s*\d{0,2})\s*[~〜～\-−–—ー]\s*(\d{1,2}\s*[:：時]\s*\d{0,2})")
@@ -60,7 +64,8 @@ def closed_days(text):
 
 
 MAX_SLOTS = 3      # 朝・昼・夜の3診制まで対応する
-MAX_DEPTS = 8      # 診療科目を個別セルに展開する上限
+MAX_DEPTS = 8      # 標榜科を個別セルに展開する上限
+MAX_BASIC = 5      # 基本領域19診療科を個別セルに展開する上限
 
 
 def summarize(payload):
@@ -119,11 +124,13 @@ def main(path):
     for i in range(1, MAX_SLOTS + 1):
         slot_cols += [f"時間帯{i}開始", f"時間帯{i}終了"]
     dept_cols = [f"診療科目{i}" for i in range(1, MAX_DEPTS + 1)]
+    basic_cols = [f"基本領域{i}" for i in range(1, MAX_BASIC + 1)]
     w.writerow(["医療機関コード", "会社名", "ウェブサイトURL",
                 "診療時間（整形）", "休診日"] + slot_cols +
-               ["診療科目"] + dept_cols + ["診療科目数", "診療科目の出所",
+               ["診療科目"] + dept_cols + ["診療科目数", "診療科目の出所"] +
+               ["基本領域"] + basic_cols + ["基本領域数",
                 "診療時間の取得元", "診療時間（原文）"])
-    n = parsed = with_dept = 0
+    n = parsed = with_dept = with_basic = 0
     for line in open(path, encoding="utf-8"):
         line = line.strip()
         if not line:
@@ -136,15 +143,21 @@ def main(path):
             parsed += 1
         if depts:
             with_dept += 1
-        d5 = (depts + [""] * MAX_DEPTS)[:MAX_DEPTS]
+        d8 = (depts + [""] * MAX_DEPTS)[:MAX_DEPTS]
+        basics = to_basic_areas(depts)
+        if basics:
+            with_basic += 1
+        b5 = (basics + [""] * MAX_BASIC)[:MAX_BASIC]
         w.writerow([p.get("医療機関コード", ""), p.get("会社名", ""),
                     p.get("ウェブサイトURL", ""),
                     s["診療時間（整形）"], s["休診日"]] + s["時間帯"] +
-                   ["・".join(depts)] + d5 + [len(depts), src,
+                   ["・".join(depts)] + d8 + [len(depts), src] +
+                   ["・".join(basics)] + b5 + [len(basics),
                     p.get("診療時間の取得元", ""), s["診療時間（原文）"]])
     if n:
         log(f"[details] {n}件 / 診療時間 {parsed}件 ({parsed / n:.1%}) "
-            f"/ 診療科目 {with_dept}件 ({with_dept / n:.1%})")
+            f"/ 診療科目 {with_dept}件 ({with_dept / n:.1%}) "
+            f"/ 基本領域 {with_basic}件 ({with_basic / n:.1%})")
     else:
         log("[details] 0件")
 
