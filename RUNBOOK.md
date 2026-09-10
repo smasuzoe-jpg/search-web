@@ -284,6 +284,19 @@ python3 pipeline/06_details.py data/out1_verified_details.jsonl > data/out1_deta
 
 ---
 
+## STEP8  除外ルールを追加したあとのやり直し
+
+本番実行後に新しいポータルサイトが見つかった場合に使う。
+
+```bash
+python3 pipeline/08_recheck.py data/list1_verified.tsv
+python3 pipeline/04_verify.py data/list1_cand.jsonl data/list1_verified.tsv
+```
+
+いまの除外ルールで弾かれるURLを採用している行だけを照合結果から取り除き、
+04_verify を再実行するとその分だけがやり直される。
+**全件の再巡回は起きないので数分で終わり、検索クレジットも消費しない。**
+
 ## 想定
 
 | 工程 | 所要 | 費用 |
