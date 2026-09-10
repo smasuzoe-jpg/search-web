@@ -20,6 +20,7 @@ STEP6: 採取した診療時間と診療科目を列に整形する。
 
 診療科目は2軸で出す。標榜科そのまま（細かい）と、基本領域19診療科へ畳んだもの
 （粗い）。集計は基本領域、個別の見極めは標榜科、と使い分けられる。
+区切り文字は 標榜科=「・」、基本領域=「;」。取り違えないよう別の記号にしてある。
 """
 import csv, json, re, sys
 from common import nfkc, log
@@ -66,6 +67,8 @@ def closed_days(text):
 MAX_SLOTS = 3      # 朝・昼・夜の3診制まで対応する
 MAX_DEPTS = 8      # 標榜科を個別セルに展開する上限
 MAX_BASIC = 5      # 基本領域19診療科を個別セルに展開する上限
+DEPT_SEP = "・"     # 標榜科の区切り
+BASIC_SEP = ";"    # 基本領域の区切り
 
 
 def summarize(payload):
@@ -151,8 +154,8 @@ def main(path):
         w.writerow([p.get("医療機関コード", ""), p.get("会社名", ""),
                     p.get("ウェブサイトURL", ""),
                     s["診療時間（整形）"], s["休診日"]] + s["時間帯"] +
-                   ["・".join(depts)] + d8 + [len(depts), src] +
-                   ["・".join(basics)] + b5 + [len(basics),
+                   [DEPT_SEP.join(depts)] + d8 + [len(depts), src] +
+                   [BASIC_SEP.join(basics)] + b5 + [len(basics),
                     p.get("診療時間の取得元", ""), s["診療時間（原文）"]])
     if n:
         log(f"[details] {n}件 / 診療時間 {parsed}件 ({parsed / n:.1%}) "
