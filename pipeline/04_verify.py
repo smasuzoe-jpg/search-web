@@ -20,30 +20,59 @@ from depts import extract_departments
 
 TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
 _robots, _rlock = {}, threading.Lock()
-_hostlast, _hlock = {}, threading.Lock()
+_hostlast = {}
+_host_locks, _hl_guard = {}, threading.Lock()
+_MISSING = object()
+ROBOTS_TIMEOUT = 8
+HOST_DELAY = 1.0          # 同じサイトへの連続アクセスをあける秒数
 
 
 def allowed(url):
-    """robots.txt で禁止されていないか。取得できない場合は許可扱い。"""
+    """
+    robots.txt で禁止されていないか。取得できない場合は許可扱い。
+
+    取得は必ずロックの外で行う。ロックを持ったまま通信すると、
+    応答しないサイトが1つあるだけで全スレッドが止まる。
+    """
     p = urlparse(url)
     base = f"{p.scheme}://{p.netloc}"
     with _rlock:
-        if base not in _robots:
-            r = rp.RobotFileParser()
-            r.set_url(base + "/robots.txt")
-            try:
-                r.read()
-            except Exception:
-                r = None
-            _robots[base] = r
-    r = _robots[base]
-    return True if r is None else r.can_fetch(VERIFY_USER_AGENT, url)
+        cached = _robots.get(base, _MISSING)
+    if cached is _MISSING:
+        parser = None
+        try:
+            resp = requests.get(base + "/robots.txt", timeout=ROBOTS_TIMEOUT,
+                                headers={"User-Agent": VERIFY_USER_AGENT})
+            if resp.status_code == 200:
+                parser = rp.RobotFileParser()
+                parser.parse(resp.text.splitlines())
+        except Exception:
+            parser = None
+        with _rlock:
+            _robots.setdefault(base, parser)
+        cached = parser
+    return True if cached is None else cached.can_fetch(VERIFY_USER_AGENT, url)
+
+
+def _host_lock(host):
+    with _hl_guard:
+        lk = _host_locks.get(host)
+        if lk is None:
+            lk = _host_locks[host] = threading.Lock()
+        return lk
 
 
 def polite(host):
-    with _hlock:
-        last = _hostlast.get(host, 0)
-        wait = 1.0 - (time.time() - last)
+    """
+    同じサイトへの連続アクセスだけをあける。
+
+    待ちは「そのサイト用の鍵」の中で行う。共通の鍵の中で待つと、
+    待っている間ほかのサイトの処理まで止まり、並列数が意味をなさなくなる。
+    """
+    lk = _host_lock(host)
+    with lk:
+        last = _hostlast.get(host, 0.0)
+        wait = HOST_DELAY - (time.time() - last)
         if wait > 0:
             time.sleep(wait)
         _hostlast[host] = time.time()
@@ -117,7 +146,7 @@ def hours_from(html, url):
     payload = extract_hours(html)
     if has_hours(payload):
         return payload, url
-    for sub in subpage_urls(html, url, hints=HOURS_LINK_HINTS, limit=2):
+    for sub in subpage_urls(html, url, hints=HOURS_LINK_HINTS, limit=1):
         h2 = fetch(sub)
         if h2:
             p2 = extract_hours(h2)
@@ -127,8 +156,14 @@ def hours_from(html, url):
 
 
 def judge(rec):
+    """
+    候補を上から順に見て、確度が足りたら打ち切る。
+
+    1施設あたりの取得ページ数がそのまま総時間になるので、無駄な取得をしない。
+    下層ページまで見るのは最初の候補だけにする（2番目以降は本命でないことが多い）。
+    """
     best = None
-    for c in rec.get("候補", []):
+    for idx, c in enumerate(rec.get("候補", [])):
         url = c["url"]
         if is_blocked_for(url, rec.get("会社名", "")):
             continue                      # ポータル・医師会・自治体案内は公式サイトではない
@@ -137,7 +172,7 @@ def judge(rec):
             continue
         text = text_of(html)
         pts, why = score(rec, text)
-        if pts < CONFIDENCE_HIGH:                 # 足りなければアクセスページも見る
+        if pts < CONFIDENCE_HIGH and idx == 0:    # 足りなければアクセスページも見る
             for sub in subpage_urls(html, url):
                 h2 = fetch(sub)
                 if h2:
@@ -146,7 +181,7 @@ def judge(rec):
                         pts, why = p2, w2 + ["下層ページで確認"]
         if best is None or pts > best[0]:
             best = (pts, url, why, html)
-        if pts >= CONFIDENCE_HIGH + 2:            # 満点近ければ以降の候補は見ない
+        if pts >= CONFIDENCE_HIGH:                # 「高」に届いたら以降の候補は見ない
             break
 
     if not best or best[0] < 2:
