@@ -215,6 +215,7 @@ def main(cand_path, out_path):
             if r["医療機関コード"] not in done:
                 recs.append(r)
     log(f"[verify] 対象 {len(recs)}件 並列={VERIFY_CONCURRENCY}")
+    t0 = time.time()
 
     # 診療時間も診療科目も、サイトを開いたこの一度きりしか採れない。必ず同時に保存する。
     details_path = re.sub(r"\.tsv$", "", out_path) + "_details.jsonl"
@@ -242,8 +243,12 @@ def main(cand_path, out_path):
                         got_hours += 1
                 if i % 50 == 0:
                     out.flush(); hout.flush()   # ドライブ上の書き込みは50件ごとにまとめる
-                if i % 500 == 0:
-                    log(f"  ... {i}/{len(recs)}  診療時間 {got_hours}件")
+                if i % 200 == 0:
+                    el = time.time() - t0
+                    rate = i / el if el else 0
+                    eta = (len(recs) - i) / rate / 60 if rate else 0
+                    log(f"  ... {i}/{len(recs)}  診療時間 {got_hours}件  "
+                        f"毎秒{rate:.1f}件  残り約{eta:.0f}分")
             out.flush(); hout.flush()
     log(f"[verify] 完了 / 診療時間を採取 {got_hours}件 -> {details_path}")
 

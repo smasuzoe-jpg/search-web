@@ -123,6 +123,7 @@ def main():
 
     n = 0
     stop = False
+    t0 = time.time()
     with open(a.outfile, "a", encoding="utf-8") as out:
         with cf.ThreadPoolExecutor(SEARCH_CONCURRENCY) as ex:
             futs = {ex.submit(one, r): r for r in todo}
@@ -144,8 +145,11 @@ def main():
                 # 中断時に失うのは最大50件で、再開すればその分だけ検索し直される。
                 if n % 50 == 0:
                     out.flush()
-                if n % 500 == 0:
-                    log(f"  ... {n}/{len(todo)}")
+                if n % 200 == 0:
+                    el = time.time() - t0
+                    rate = n / el if el else 0
+                    eta = (len(todo) - n) / rate / 60 if rate else 0
+                    log(f"  ... {n}/{len(todo)}  毎秒{rate:.1f}件  残り約{eta:.0f}分")
         out.flush()
     log(f"[search] 完了 {n}件 検索実行 / 累計 {len(done) + n}件")
 
