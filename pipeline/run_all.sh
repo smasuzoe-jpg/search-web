@@ -48,7 +48,12 @@ echo "=== $(date) done $IN ===" >> "$LOG"
 [ -f "${OUT}_details.csv" ] && \
   run python3 "$HERE/07_merge.py" "${OUT}_audit.csv" "${OUT}_details.csv" > "${OUT}_all.csv"
 
+# STEP12 HubSpot取込用（プロパティ名に合わせた列だけ）
+[ -f "${OUT}_all.csv" ] && \
+  run python3 "$HERE/12_hubspot.py" "${OUT}_all.csv" > "${OUT}_hubspot.csv"
+
 echo "全項目: ${OUT}_all.csv"
-echo "取込用: ${OUT}_import.csv"
+echo "HubSpot取込用: ${OUT}_hubspot.csv"
+echo "取込用(URLのみ): ${OUT}_import.csv"
 echo "監査用: ${OUT}_audit.csv"
 echo "診療時間・科目: ${OUT}_details.csv"

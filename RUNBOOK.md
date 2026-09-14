@@ -202,6 +202,25 @@ python3 pipeline/07_merge.py data/out1_audit.csv data/out1_details.csv > data/ou
 
 医療機関コードで突き合わせる。コードが空の施設はウェブサイトURLで突き合わせる。
 
+## STEP12  HubSpot取込用CSV
+
+```bash
+python3 pipeline/12_hubspot.py data/out1_all.csv > data/out1_hubspot.csv
+```
+
+列名をHubSpot側のプロパティ名に合わせて書き出す。
+
+| 出力する列名 | 中身 |
+| --- | --- |
+| レコードID | 既存レコードを見つける鍵。必ず先頭に入れる |
+| ウェブサイトURL | 「高」判定のURL |
+| 休診日 | 曜日・祝日・年末年始・長期休暇のみ |
+| 診療時間帯1〜3 開始 / 終了 | `09:00` 形式 |
+| 診療科目 | 標榜科。`・` 区切り、最大8 |
+| 基本領域科 | 基本領域19診療科。`;` 区切り |
+
+すべての項目が空の行は書かない。
+
 ### 診療時間と診療科目を列に整形する
 
 ```bash
