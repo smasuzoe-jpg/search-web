@@ -24,11 +24,11 @@ STEP6: 採取した診療時間と診療科目を列に整形する。
 """
 import csv, json, re, sys
 from common import nfkc, log
+from closed import closed_days
 from depts import departments_from_name, to_basic_areas
 
 CLOCK = re.compile(r"(\d{1,2})\s*[:：時]\s*(\d{1,2})?")
 RANGE = re.compile(r"(\d{1,2}\s*[:：時]\s*\d{0,2})\s*[~〜～\-−–—ー]\s*(\d{1,2}\s*[:：時]\s*\d{0,2})")
-CLOSED = re.compile(r"(休診日?|休み|定休日?)\s*[:：]?\s*([^\n。]{1,40})")
 
 
 def norm_time(s):
@@ -52,16 +52,6 @@ def time_ranges(text):
             if r not in out:
                 out.append(r)
     return out
-
-
-def closed_days(text):
-    t = nfkc(text)
-    m = CLOSED.search(t)
-    if not m:
-        return ""
-    tail = m.group(2).strip(" |:：・")
-    tail = re.split(r"\s{2,}|\||／", tail)[0].strip()
-    return tail[:40]
 
 
 MAX_SLOTS = 3      # 朝・昼・夜の3診制まで対応する
