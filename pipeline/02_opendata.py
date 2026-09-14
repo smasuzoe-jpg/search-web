@@ -73,7 +73,8 @@ def main(work_path, opendata_dir):
             already += 1
             r["取得元"] = "元データ"
         else:
-            url = (table["code"].get(r["医療機関コード"])
+            code = (r.get("医療機関コード") or "").strip()
+            url = ((table["code"].get(code) if code else None)
                    or table["phone"].get(norm_phone(r.get("電話番号", ""))))
             if url:
                 r["ウェブサイトURL"] = url

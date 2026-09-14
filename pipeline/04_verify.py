@@ -7,7 +7,7 @@ STEP4: 候補URLを実際に開いて、電話番号・番地・施設名の一�
 この工程が同名別施設・同一ビル内別科の誤採用を防ぐ。中断・再開できる。
 robots.txt を尊重し、同一ホストへの連続アクセスは間隔をあける。
 """
-import concurrent.futures as cf, json, os, re, sys, threading, time
+import concurrent.futures as cf, csv, json, os, re, sys, threading, time
 import urllib.robotparser as rp
 from urllib.parse import urljoin, urlparse
 import requests

@@ -9,7 +9,7 @@ STEP8: 除外ルールを追加したあと、影響を受けた行だけをや�
 全件の再巡回は起きないので数分で終わり、検索クレジットも消費しない。
 """
 import csv, json, os, re, sys
-from common import is_blocked_for, log
+from common import is_blocked_for, rec_key, log
 
 
 def main(verified_path):
@@ -27,7 +27,7 @@ def main(verified_path):
         url = (r.get("ウェブサイトURL") or "").strip()
         name = r.get("会社名") or ""
         if url and not url.startswith("（") and is_blocked_for(url, name):
-            drop.add((r.get("医療機関コード") or "").strip())
+            drop.add(rec_key(r))      # 空コード同士がまとめて消えないようにする
         else:
             keep.append(r)
 
@@ -44,7 +44,7 @@ def main(verified_path):
         kept = []
         for line in open(details_path, encoding="utf-8"):
             try:
-                if json.loads(line).get("医療機関コード") not in drop:
+                if rec_key(json.loads(line)) not in drop:
                     kept.append(line)
             except Exception:
                 pass
