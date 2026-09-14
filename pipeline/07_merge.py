@@ -35,7 +35,8 @@ def main(audit_path, details_path):
     for r in rd:
         n += 1
         rid = (r.get("レコードID") or "").strip()
-        code = (r.get("医療機関コード") or "").strip()
+        # 監査用CSVでは列名が「医療機関コード（正）」。どちらの名前でも拾う。
+        code = (r.get("医療機関コード") or r.get("医療機関コード（正）") or "").strip()
         d = by_rid.get(rid) if rid else None
         if d is None and code:
             d = by_code.get(code)
