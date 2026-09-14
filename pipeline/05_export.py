@@ -16,10 +16,17 @@ AUTO_APPLY = {"高"}          # 自動反映する確度
 
 
 def main(work_path, verified_path, out_prefix):
-    ver = {}
+    # レコードIDを最優先で突合する。医療機関コードは空欄がありうるので、
+    # 空同士が一致して別の施設に同じURLが付くことを防ぐ。
+    by_rid, by_code = {}, {}
     with open(verified_path, encoding="utf-8") as f:
         for r in csv.DictReader(f, delimiter="\t"):
-            ver[r["医療機関コード"].strip()] = r
+            rid = (r.get("レコードID") or "").strip()
+            code = (r.get("医療機関コード") or "").strip()
+            if rid:
+                by_rid[rid] = r
+            if code:
+                by_code.setdefault(code, r)
 
     f = open_csv(work_path)
     rows = list(csv.DictReader(f))
@@ -42,7 +49,11 @@ def main(work_path, verified_path, out_prefix):
             stats[src if src in stats else "元データ"] += 1
             conf = "高"
         else:
-            hit = ver.get((r.get("医療機関コード") or "").strip())
+            rid = (r.get("レコードID") or "").strip()
+            code = (r.get("医療機関コード") or "").strip()
+            hit = by_rid.get(rid) if rid else None
+            if hit is None and code:
+                hit = by_code.get(code)
             if not hit:
                 stats["未処理"] += 1
                 conf = "未処理"

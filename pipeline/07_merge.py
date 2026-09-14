@@ -8,25 +8,23 @@ STEP7: 監査用CSVと診療時間・診療科目CSVを、医療機関コード�
 ウェブサイトURLで突き合わせる。
 """
 import csv, sys
-from common import open_csv, log
+from common import open_csv, rec_key, log
 
-DETAIL_SKIP = {"医療機関コード", "会社名", "ウェブサイトURL"}   # 監査用と重複する列
-
-
-def key_of(row):
-    code = (row.get("医療機関コード") or "").strip()
-    return ("CODE", code) if code else ("URL", (row.get("ウェブサイトURL") or "").strip())
+DETAIL_SKIP = {"レコードID", "医療機関コード", "会社名", "ウェブサイトURL"}  # 監査用と重複
 
 
 def main(audit_path, details_path):
     f = open_csv(details_path)
     rd = csv.DictReader(f)
     detail_cols = [c for c in (rd.fieldnames or []) if c not in DETAIL_SKIP]
-    details = {}
+    by_rid, by_code = {}, {}
     for r in rd:
-        k = key_of(r)
-        if k[1]:
-            details[k] = r
+        rid = (r.get("レコードID") or "").strip()
+        code = (r.get("医療機関コード") or "").strip()
+        if rid:
+            by_rid[rid] = r
+        if code:
+            by_code.setdefault(code, r)
     f.close()
 
     f = open_csv(audit_path)
@@ -36,7 +34,11 @@ def main(audit_path, details_path):
     n = hit = 0
     for r in rd:
         n += 1
-        d = details.get(key_of(r))
+        rid = (r.get("レコードID") or "").strip()
+        code = (r.get("医療機関コード") or "").strip()
+        d = by_rid.get(rid) if rid else None
+        if d is None and code:
+            d = by_code.get(code)
         if d:
             hit += 1
         w.writerow([r.get(c) or "" for c in rd.fieldnames] +

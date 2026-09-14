@@ -28,6 +28,22 @@ def norm_code(s):
     return re.sub(r"\D", "", s or "")
 
 
+def rec_key(r):
+    """
+    行を一意に識別するキー。
+
+    医療機関コードは2%ほど空欄があり、空同士が同じ扱いになって
+    別の施設に同じURLが付いてしまう。レコードIDを最優先にする。
+    """
+    rid = (r.get("レコードID") or "").strip()
+    if rid:
+        return "R:" + rid
+    code = (r.get("医療機関コード") or "").strip()
+    if code:
+        return "C:" + code
+    return "N:" + (r.get("会社名") or "") + "|" + (r.get("住所") or "")
+
+
 def format_zip(s):
     """出力用に 1120013 -> 112-0013 に整える。"""
     d = re.sub(r"\D", "", s or "")

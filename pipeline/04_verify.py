@@ -12,7 +12,7 @@ import urllib.robotparser as rp
 from urllib.parse import urljoin, urlparse
 import requests
 from common import (norm_name, norm_phone, addr_numbers, city_part, nfkc, log,
-                    is_blocked_for)
+                    is_blocked_for, rec_key)
 from config import (VERIFY_CONCURRENCY, VERIFY_TIMEOUT, VERIFY_USER_AGENT,
                     CONFIDENCE_HIGH, CONFIDENCE_MID, SUBPAGE_HINTS)
 from hours import extract_hours, has_hours, HOURS_LINK_HINTS
@@ -192,7 +192,8 @@ def judge(rec):
     conf = "高" if pts >= CONFIDENCE_HIGH else ("中" if pts >= CONFIDENCE_MID else "低")
     payload, src = hours_from(html, url)
     payload["診療科目"] = extract_departments(html)
-    payload["医療機関コード"] = rec["医療機関コード"]
+    payload["レコードID"] = rec.get("レコードID", "")
+    payload["医療機関コード"] = rec.get("医療機関コード", "")
     payload["会社名"] = rec.get("会社名", "")
     payload["ウェブサイトURL"] = url
     payload["診療時間の取得元"] = src
@@ -203,16 +204,15 @@ def main(cand_path, out_path):
     done = set()
     if os.path.exists(out_path):
         with open(out_path, encoding="utf-8") as f:
-            next(f, None)
-            for line in f:
-                done.add(line.split("\t")[0])
+            for r in csv.DictReader(f, delimiter="\t"):
+                done.add(rec_key(r))
         log(f"[resume] 済み {len(done)}件")
 
     recs = []
     with open(cand_path, encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            if r["医療機関コード"] not in done:
+            if rec_key(r) not in done:
                 recs.append(r)
     log(f"[verify] 対象 {len(recs)}件 並列={VERIFY_CONCURRENCY}")
     t0 = time.time()
@@ -225,7 +225,8 @@ def main(cand_path, out_path):
     with open(out_path, "a", encoding="utf-8") as out, \
          open(details_path, "a", encoding="utf-8") as hout:
         if new:
-            out.write("医療機関コード\t会社名\tウェブサイトURL\t確度\t判定根拠\n")
+            out.write("レコードID\t医療機関コード\t会社名\t"
+                      "ウェブサイトURL\t確度\t判定根拠\n")
         with cf.ThreadPoolExecutor(VERIFY_CONCURRENCY) as ex:
             futs = {ex.submit(judge, r): r for r in recs}
             for i, fut in enumerate(cf.as_completed(futs), 1):
@@ -235,7 +236,8 @@ def main(cand_path, out_path):
                     url, conf, why, payload = fut.result()
                 except Exception as e:
                     url, conf, why = "", "未検出", f"照合エラー: {e}"
-                out.write("\t".join([r["医療機関コード"], r["会社名"],
+                out.write("\t".join([r.get("レコードID", ""),
+                                     r.get("医療機関コード", ""), r.get("会社名", ""),
                                      url or "（未検出）", conf, why]) + "\n")
                 if payload:
                     hout.write(json.dumps(payload, ensure_ascii=False) + "\n")

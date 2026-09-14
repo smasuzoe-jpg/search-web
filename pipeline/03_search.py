@@ -10,7 +10,7 @@ APIキーは環境変数からのみ読む（ファイルに書かない）。
 """
 import argparse, concurrent.futures as cf, json, os, sys, threading, time
 import requests
-from common import open_csv, is_blocked, log
+from common import open_csv, is_blocked, rec_key, log
 import csv
 from config import (SEARCH_PROVIDER, SEARCH_RESULTS_PER_QUERY, SEARCH_QPS,
                     SEARCH_MAX_RETRY, SEARCH_CONCURRENCY)
@@ -92,7 +92,7 @@ def main():
         with open(a.outfile, encoding="utf-8") as f:
             for line in f:
                 try:
-                    done.add(json.loads(line)["医療機関コード"])
+                    done.add(rec_key(json.loads(line)))
                 except Exception:
                     pass
         log(f"[resume] 済み {len(done)}件を読み込み")
@@ -100,7 +100,7 @@ def main():
     f = open_csv(a.work)
     todo = [r for r in csv.DictReader(f)
             if not (r.get("ウェブサイトURL") or "").strip()
-            and (r.get("医療機関コード") or "") not in done]
+            and rec_key(r) not in done]
     f.close()
     if a.limit:
         todo = todo[:a.limit]
@@ -116,7 +116,8 @@ def main():
             raise RuntimeError("打ち切り済み")   # クレジットを無駄に消費しない
         hits = run_query(g(r, "検索クエリ"))
         cands = [h for h in hits if h["url"] and not is_blocked(h["url"])]
-        return {"医療機関コード": g(r, "医療機関コード"), "会社名": g(r, "会社名"),
+        return {"レコードID": g(r, "レコードID"),
+                "医療機関コード": g(r, "医療機関コード"), "会社名": g(r, "会社名"),
                 "住所": g(r, "住所"), "電話番号": g(r, "電話番号"),
                 "検索クエリ": g(r, "検索クエリ"),
                 "候補": cands[:SEARCH_RESULTS_PER_QUERY]}

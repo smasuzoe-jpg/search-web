@@ -284,6 +284,27 @@ python3 pipeline/06_details.py data/out1_verified_details.jsonl > data/out1_deta
 
 ---
 
+## 一意キーについて（重要）
+
+行の同一性は **レコードID** で判定する。医療機関コードは実データで2.4%が空欄で、
+空同士を同じ行とみなすと **別の施設に同じURLが付く**。
+
+```python
+from common import rec_key      # レコードID → 医療機関コード → 会社名+住所 の順
+```
+
+STEP3からSTEP7まで、すべてこのキーで突合する。
+
+### 旧形式の中間ファイルを修復する
+
+```bash
+python3 pipeline/10_repair.py /content/drive/MyDrive/medical_url
+```
+
+医療機関コードを一意キーにしていた頃のファイルにレコードIDを補う。
+**採取済みの診療時間や診療科目は残る。** 特定できない行だけを取り除き、
+04_verify を再実行するとその分だけが処理される。
+
 ## STEP8  除外ルールを追加したあとのやり直し
 
 本番実行後に新しいポータルサイトが見つかった場合に使う。
@@ -296,6 +317,16 @@ python3 pipeline/04_verify.py data/list1_cand.jsonl data/list1_verified.tsv
 いまの除外ルールで弾かれるURLを採用している行だけを照合結果から取り除き、
 04_verify を再実行するとその分だけがやり直される。
 **全件の再巡回は起きないので数分で終わり、検索クレジットも消費しない。**
+
+## STEP9  出来上がった結果の検査
+
+```bash
+python3 pipeline/09_check.py /content/drive/MyDrive/medical_url
+```
+
+確度の分布、除外すべきURLの混入、「高」で多く使われているドメイン、
+同じURLが複数施設に付いていないかを一度に確認する。
+巨大なCSVを開かずに品質を判断できる。
 
 ## 想定
 

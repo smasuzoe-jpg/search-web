@@ -128,7 +128,7 @@ def main(path):
         slot_cols += [f"時間帯{i}開始", f"時間帯{i}終了"]
     dept_cols = [f"診療科目{i}" for i in range(1, MAX_DEPTS + 1)]
     basic_cols = [f"基本領域{i}" for i in range(1, MAX_BASIC + 1)]
-    w.writerow(["医療機関コード", "会社名", "ウェブサイトURL",
+    w.writerow(["レコードID", "医療機関コード", "会社名", "ウェブサイトURL",
                 "診療時間（整形）", "休診日"] + slot_cols +
                ["診療科目"] + dept_cols + ["診療科目数", "診療科目の出所"] +
                ["基本領域"] + basic_cols + ["基本領域数",
@@ -151,7 +151,8 @@ def main(path):
         if basics:
             with_basic += 1
         b5 = (basics + [""] * MAX_BASIC)[:MAX_BASIC]
-        w.writerow([p.get("医療機関コード", ""), p.get("会社名", ""),
+        w.writerow([p.get("レコードID", ""), p.get("医療機関コード", ""),
+                    p.get("会社名", ""),
                     p.get("ウェブサイトURL", ""),
                     s["診療時間（整形）"], s["休診日"]] + s["時間帯"] +
                    [DEPT_SEP.join(depts)] + d8 + [len(depts), src] +
