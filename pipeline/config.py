@@ -60,12 +60,19 @@ BLOCKED_SUFFIXES = [
 ]
 
 # ホスト名に含まれていたら除外する語
-BLOCKED_HOST_WORDS = ["ishikai", "医師会", "doctormap", "doctor-map",
-                      "renkei.hosp", "kenshin-navi"]
+BLOCKED_HOST_WORDS = [
+    "ishikai", "医師会", "doctormap", "doctor-map", "renkei.hosp", "kenshin-navi",
+    # 医師会は med.or.jp 以外のドメインも使う（-med.org / -med.com / mediasso）
+    "-med.org", "-med.com", "-med.jp", "mediasso", "sousa.jp",
+    # 本番の検査で見つかった地域ポータル・団体サイト
+    "iryou21", "ayamu.casio", "asitano", "home-dr.jp", "bihokuikiiki",
+    "rakuraku.or.jp", "hamamatsu-pippi", "comhbo", "sma.or.jp",
+    "aichi-hifu", "osaka-ganka", "neconome", "park.paa.jp", "web.clinicn",
+]
 
 # 1つのドメインが何施設に付いたらポータルとみなすか。
 # 実在するグループ院は多くても20院程度なので、それを超えたら名簿サイトとみなす。
-PORTAL_MIN_FACILITIES = 25
+PORTAL_MIN_FACILITIES = 20
 
 # 上の件数を超えても除外しないドメイン（本物のグループ院を守るため）
 PORTAL_ALLOWLIST = []
