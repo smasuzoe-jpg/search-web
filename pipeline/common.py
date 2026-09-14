@@ -2,8 +2,15 @@
 """正規化と共通ユーティリティ。"""
 import csv, os, re, sys, unicodedata
 from config import (COLUMN_ALIASES, BLOCKED_DOMAINS, BLOCKED_SUFFIXES,
-                    PUBLIC_ONLY_SUFFIXES, PUBLIC_ONLY_PATTERNS,
-                    PUBLIC_NAME_KEYWORDS)
+                    BLOCKED_HOST_WORDS, PUBLIC_ONLY_SUFFIXES,
+                    PUBLIC_ONLY_PATTERNS, PUBLIC_NAME_KEYWORDS)
+
+# 実行結果から自動検出したポータルを、この環境変数が指すファイルから読み込む。
+_EXTRA = set()
+_extra_path = os.environ.get("EXTRA_BLOCKED_FILE", "")
+if _extra_path and os.path.exists(_extra_path):
+    with open(_extra_path, encoding="utf-8") as _f:
+        _EXTRA = {l.strip().lower() for l in _f if l.strip() and not l.startswith("#")}
 
 LEGAL = ["医療法人社団", "医療法人財団", "一般社団法人", "公益社団法人", "一般財団法人",
          "公益財団法人", "社会医療法人", "特定医療法人", "独立行政法人", "地方独立行政法人",
@@ -144,7 +151,11 @@ def url_host(url):
 
 def is_blocked(url):
     host = url_host(url)
+    if host in _EXTRA:
+        return True
     if any(host.endswith(sfx) for sfx in BLOCKED_SUFFIXES):
+        return True
+    if any(w in host for w in BLOCKED_HOST_WORDS):
         return True
     return any(host == b or host.endswith("." + b) for b in _BLOCK)
 

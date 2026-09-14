@@ -52,8 +52,23 @@ BLOCKED_DOMAINS = [
 # ドメイン末尾での除外。ここに該当したら候補にしない。
 BLOCKED_SUFFIXES = [
     ".mhlw.go.jp",   # 医療情報ネット等、厚労省の検索ポータル
-    ".med.or.jp",    # 医師会の医療機関ディレクトリ（公式サイトではない）
+    # 医師会の名簿。「kiryu.gunma.med.or.jp」だけでなく
+    # 「setagaya-med.or.jp」のようにハイフンで繋ぐ形も多い。
+    "med.or.jp",
+    "ishikai.or.jp",
+    "-ishikai.jp",
 ]
+
+# ホスト名に含まれていたら除外する語
+BLOCKED_HOST_WORDS = ["ishikai", "医師会", "doctormap", "doctor-map",
+                      "renkei.hosp", "kenshin-navi"]
+
+# 1つのドメインが何施設に付いたらポータルとみなすか。
+# 実在するグループ院は多くても20院程度なので、それを超えたら名簿サイトとみなす。
+PORTAL_MIN_FACILITIES = 25
+
+# 上の件数を超えても除外しないドメイン（本物のグループ院を守るため）
+PORTAL_ALLOWLIST = []
 
 # 自治体ドメインは「公的施設のときだけ」公式サイトとして認める。
 # 県立病院や保健所は lg.jp が正規サイトだが、民間クリニックのlg.jpは案内ページ。
